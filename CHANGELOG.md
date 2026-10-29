@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-10-29
+
+### Added
+- Page commands are guarded by environment. `browser_debug_ui_open`, `ui_close`, `language` with `code` and `mock_set` run only when the control object's `identity()` reports an environment listed in the new `bridge.testEnvironments` (default `dev`, `test`, `staging`; `"*"` accepts any reported value). The field is named by the new `bridge.environmentField` (default `environment`). A bridge that does not report the field, a game that has not reported it yet and any other value are refused before the command reaches the page. Listing views, reading the language, listing and clearing mocks stay allowed.
+  **Upgrade note:** a project bridge whose `identity()` has no environment field now has these four commands refused. Add the field to `identity()`, or point `bridge.environmentField` at the field it already reports, and list your test environments in `bridge.testEnvironments`. While `git-desk.config.json` cannot be used, these commands are refused rather than run on the default list.
+- The preview toolbar shows "Mock responses active: N" when the bridge's `status()` reports `mocks`, in the warning colour and after any other state.
+- Reloading the extension closes an open Debug Preview tab and reopens it on the new code. Quitting Creator leaves the tab to Creator's saved layout. A reload requested through `creator_reload_extension` always reopens it.
+
+### Changed
+- The Debug Preview always opens fitted to the panel. Manual zoom leaves fit only until the panel closes; the last factor is used as the starting point until the page reports its size, so reopening does not flash at 100%.
+- Results of the Creator toolbar buttons and of the Git Desk panel's debug menu close by themselves: successes after 3 seconds, failures after 10. Hovering keeps them open, and progress stays until the action settles.
+- The "Open inspector in a separate window" button uses a two-window icon, so it no longer looks like "Open preview in external browser".
+- `browser_debug_mock_clear` with `transport` alone now calls the bridge's `mockClear(transport)`, which should clear all mocks of that transport; before, it cleared every mock. `name` without `transport` is rejected instead of clearing everything. **Upgrade note:** a bridge whose `mockClear` only handles no arguments or `(transport, name)` must handle `(transport)` too; see `bridge.debugName` in `docs/CONFIG.md`.
+
+### Fixed
+- A password `EditBox` no longer reveals its text. `string`/`_string` of the box and of the label it renders into report only the length in the runtime panels, `runtime_inspector_inspect`, `runtime_inspector_print`, the Creator console, field reads and `runtime_inspector_layout` text. Its input type cannot be changed from the inspector. For pages that still run an older inspector, the main process masks the `EditBox` component's own text; reload the preview so the label node and layout text are masked too.
+- `browser_debug_export` no longer writes captured request and response bodies into `evidence.json`; entries that had them are marked `bodiesOmitted`.
+- The Debug Preview reconnects by itself when its binding is lost, for example after the page's debugger was detached, without reloading the game. Binding no longer waits behind a pending toolbar action, and the page counts as bound only after the main process accepted it.
+
 ## [0.2.1] — 2026-10-29
 
 ### Fixed
@@ -125,6 +144,7 @@ Last version developed inside the private project; summarised from the Chinese c
 ### Added
 - First standalone package: recursive repository discovery, working tree and index diffs with image comparison, LFS object reads, file staging with related `.meta` expansion, commit/push/fetch, fast-forward update, branch creation and switching, submodule sync, previewed writes with two-minute expiry, Agent IPC protocol v1 (`details(repo, {kind: 'agent', protocol: 1, ...})`).
 
-[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jiaqihuu/cocos-git-desk/releases/tag/v0.2.0

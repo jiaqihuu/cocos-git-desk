@@ -37,3 +37,14 @@ test('Git Desk failure is visible and retryable',async t=>{
  f.gitButton.dispatchEvent(new Event('click'));await flush();assert.match(f.result.textContent,/内嵌打开失败/);assert.equal(f.gitButton.disabled,false);
  Editor.Message.request=async()=>true;f.gitButton.dispatchEvent(new Event('click'));await flush();assert.equal(f.result.textContent,'已打开 Git Desk。');
 });
+
+test('the result popover closes by itself: success after 3 s, failure after 10 s; outside click still closes at once',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const f=fixture(t);global.Editor={Message:{request:async()=>({ok:true,data:'已打开内嵌调试预览。'})}};toolbar.ready.call(f.instance);
+ f.button.dispatchEvent(new Event('click'));await flush();assert.equal(f.result.hidden,false);assert.equal(f.result.textContent,'已打开内嵌调试预览。');
+ t.mock.timers.tick(3000);assert.equal(f.result.hidden,true,'success closes after 3 s');
+ Editor.Message.request=async()=>({ok:false,error:'面板打开失败'});f.button.dispatchEvent(new Event('click'));await flush();
+ t.mock.timers.tick(3000);assert.equal(f.result.hidden,false,'failure stays readable');t.mock.timers.tick(7000);assert.equal(f.result.hidden,true,'failure closes after 10 s');
+ Editor.Message.request=async()=>true;f.gitButton.dispatchEvent(new Event('click'));await flush();assert.equal(f.result.textContent,'已打开 Git Desk。');assert.equal(f.result.hidden,false);
+ f.instance.$.wrap.ownerDocument.dispatchEvent(new Event('pointerdown'));assert.equal(f.result.hidden,true,'outside click closes immediately');
+});

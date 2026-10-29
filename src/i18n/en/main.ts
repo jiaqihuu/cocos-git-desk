@@ -20,6 +20,8 @@ register('en', {
     'main.configInvalidJson': '{file} is not valid JSON: {reason}',
     'main.configUnknownKey': '{file} has an unknown setting: {key}',
     'main.configFieldInvalid': '{key} in {file} is invalid; expected {expected}',
+    'main.previewCloseOnUnloadFailed': '[Debug Preview] Closing the debug preview during unload failed: {error}',
+    'main.previewReopenFailed': 'Could not reopen the debug preview after the reload: {error}',
     'main.settingsNotObject': '{file} must be a JSON object',
     'main.configLoadFailed': '[Git Desk] Could not read git-desk.config.json; using the defaults: {error}',
     // main.ts

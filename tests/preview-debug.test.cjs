@@ -5,18 +5,21 @@ const {PreviewDebugService,validateToolArgs}=require('../dist/preview-debug');
 const {toolCatalogue,defaultConfig}=require('../dist/config');
 const tools=toolCatalogue();
 const projectId='test-project-0001';
-function fixture(t,{connected=true,bridge=defaultConfig().bridge,identity={}}={}){
+function fixture(t,{connected=true,bridge=defaultConfig().bridge,identity={},configError=null}={}){
  const base=fs.mkdtempSync(path.join(os.tmpdir(),'gd-preview-debug-'));
  const root=path.join(base,'project');fs.mkdirSync(root);fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({uuid:projectId}));
  const home=path.join(base,'home');fs.mkdirSync(home);
- const settings={projectId,bridge,stateDir:path.join(home,'state'),outputDir:path.join(home,'exports')};
+ const settings={projectId,bridge,configError,stateDir:path.join(home,'state'),outputDir:path.join(home,'exports')};
  const evaluations=[],listeners=new Set();let generation=1;
- const page={options:{url:'http://localhost:7456/',root},status:()=>({present:true,connected,targetId:connected?'embedded-71-'+generation:null,generation}),
+ // environment answers the control object's identity(); observerOff makes the debug object refuse like a disabled observer.
+ const page={options:{url:'http://localhost:7456/',root},environment:'dev',status:()=>({present:true,connected,targetId:connected?'embedded-71-'+generation:null,generation}),
   evaluate:async expression=>{evaluations.push(expression);if(!connected)throw Error('内嵌预览未连接');if(page.fail)throw Error(page.fail);
+   if(expression.includes(' in identity))')){if(page.environmentError)throw Error(page.environmentError);return page.environmentReply!==undefined?page.environmentReply:{environment:page.environment};}
    if(expression.includes('const control = window['+JSON.stringify(bridge.controlName)+']'))return {enabled:true,applied:true,updatedAt:1};
+   if(page.observerOff&&expression.includes('window['+JSON.stringify(bridge.debugName)+']'))throw Error('调试采集未开启；先调用 browser_debug_enable');
    const bridgeCall=/api\["(\w+)"\]\(/.exec(expression);
    if(bridgeCall){
-    const method=bridgeCall[1];const data=method==='events'?{entries:[{time:1,sequence:1}],pending:[]}:method==='hierarchy'?{nodes:[{uuid:'n1'}]}:method==='uiOpen'?{uiid:2,open:true}:method==='language'?Promise.resolve({current:'en'}):{method};
+    const method=bridgeCall[1];const data=method==='events'?{entries:page.entries??[{time:1,sequence:1}],pending:[]}:method==='hierarchy'?{nodes:[{uuid:'n1'}]}:method==='uiOpen'?{uiid:2,open:true}:method==='language'?Promise.resolve({current:'en'}):{method};
     return {identity:{apiVersion:bridge.apiVersion,projectId,preview:true,sessionId:'page-1',integration:'project-preview',...identity},data:await data};}
    return null;},
   screenshot:async()=>Buffer.from('png'),onEvent:listener=>{listeners.add(listener);return ()=>listeners.delete(listener);},reload:()=>{generation++;for(const l of listeners)l('Page.frameNavigated',{frame:{url:'http://localhost:7456/'}});},emit:(m,p)=>{for(const l of listeners)l(m,p);}};
@@ -75,15 +78,17 @@ test('command tools reach the page bridge with their arguments, await asynchrono
  await f.service.call('browser_debug_language',{});assert.ok(f.evaluations.at(-1).includes('api["language"](...[])'));
  await f.service.call('browser_debug_mock_set',{transport:'rpc',name:'pkg.x/Get',response:{a:1},once:true});assert.ok(f.evaluations.at(-1).includes('api["mockSet"](...[{"transport":"rpc","name":"pkg.x/Get","response":{"a":1},"once":true}])'));
  await f.service.call('browser_debug_mock_clear',{transport:'rpc',name:'pkg.x/Get'});assert.ok(f.evaluations.at(-1).includes('api["mockClear"](...["rpc","pkg.x/Get"])'));
+ await f.service.call('browser_debug_mock_clear',{transport:'http'});assert.ok(f.evaluations.at(-1).includes('api["mockClear"](...["http"])'),'a transport alone clears only that transport');
  await f.service.call('browser_debug_mock_clear',{});assert.ok(f.evaluations.at(-1).includes('api["mockClear"](...[])'));
+ const sent=f.evaluations.length;await assert.rejects(f.service.call('browser_debug_mock_clear',{name:'pkg.x/Get'}),/按名字清除假响应需要同时给 transport（rpc 或 http）/);assert.equal(f.evaluations.length,sent,'a name without its transport never reaches the page');
  await f.service.call('browser_debug_mock_list',{});assert.ok(f.evaluations.at(-1).includes('api["mockList"](...[])'));
  await assert.rejects(f.service.call('browser_debug_mock_set',{transport:'ws',name:'x'}),/参数无效：transport/);
  await assert.rejects(f.service.call('browser_debug_mock_set',{transport:'rpc',name:'x',response:[1]}),/JSON 对象：response/);
  await assert.rejects(f.service.call('browser_debug_ui_open',{name:'HallView',args:{big:'x'.repeat(17000)}}),/16 KB/);
  await assert.rejects(f.service.call('browser_debug_mock_set',{transport:'rpc',name:'x',delayMs:20000}),/整数：delayMs/);
  const schema=tools.find(t=>t.name==='browser_debug_ui_open');assert.equal(schema.annotations.readOnlyHint,false);assert.equal(tools.find(t=>t.name==='browser_debug_ui_list').annotations.readOnlyHint,true);
- const timeout=new PreviewDebugService({...f.page,evaluate:async()=>{throw Error('预览桥调用超时（20 秒）');}},async()=>null,tools,f.settings);t.after(()=>timeout.close());
- await assert.rejects(timeout.call('browser_debug_language',{code:'en'}),/超时/);
+ const timeout=new PreviewDebugService({...f.page,evaluate:async expression=>{if(expression.includes(' in identity))'))return {environment:'dev'};throw Error('预览桥调用超时（20 秒）');}},async()=>null,tools,f.settings);t.after(()=>timeout.close());
+ await assert.rejects(timeout.call('browser_debug_language',{code:'en'}),/^Error: 预览桥调用超时/);
 });
 test('bridge calls are refused while the preview is disconnected or the page bridge is missing',async t=>{
  const f=fixture(t,{connected:false});
@@ -109,4 +114,61 @@ test('startup waits are reported as waiting by message id, and a missing bridge 
  service.navigatedAt=Date.now()-bridgeGraceMs-1;const late=service.status();assert.equal(late.waiting,null);assert.equal(late.lastError,null,'a project without a bridge is a state, not an error');assert.equal(late.noBridge,true);
  f.page.reload();assert.equal(service.status().waiting,missing,'a new page load restarts the grace period');
  service.lastError=text('preview.bridgeMismatch');const mismatch=service.status();assert.equal(mismatch.lastError,text('preview.bridgeMismatch'));assert.equal(mismatch.waiting,null);
+});
+test('page commands run only on a configured test environment and fail closed; listing, reading the language and clearing mocks stay available', async t => {
+ const f=fixture(t);const sent=method=>f.evaluations.some(e=>e.includes('api["'+method+'"]'));
+ const query=()=>f.evaluations.find(e=>e.includes(' in identity))'));
+ await f.service.call('browser_debug_ui_open',{name:'HallView'});assert.ok(sent('uiOpen'),'dev is a default test environment');
+ assert.ok(query().includes('window["__COCOS_GIT_DESK_PREVIEW_CONTROL__"]')&&!query().includes('__COCOS_GIT_DESK_DEBUG__'),'the environment comes from the control object, not the observer');
+ f.evaluations.length=0;
+ const commands=[['browser_debug_ui_open',{name:'HallView'},'打开界面','uiOpen'],['browser_debug_ui_close',{uiid:2},'关闭界面','uiClose'],['browser_debug_language',{code:'en'},'切换语言','language'],['browser_debug_mock_set',{transport:'rpc',name:'pkg.x/Get',response:{a:1}},'设置假响应','mockSet']];
+ for(const [setup,reason] of [[()=>{f.page.environment='prod';},/预览运行环境是 prod，不在允许的测试环境（dev, test, staging）之列，已拒绝/],
+  [()=>{f.page.environment='Dev';},/预览运行环境是 Dev/],
+  [()=>{f.page.environment=null;},/游戏还没有报告运行环境，已拒绝/],[()=>{f.page.environment='';},/游戏还没有报告运行环境/],
+  [()=>{f.page.environmentError='预览桥的 identity() 没有报告运行环境字段 environment';},/无法确认预览的运行环境（预览桥的 identity\(\) 没有报告运行环境字段 environment），为避免误操作正式环境已拒绝/],
+  [()=>{f.page.environmentReply=null;},/无法确认预览的运行环境（预览桥返回无效结果）/]]){
+  for(const [name,args,action] of commands){
+   f.page.environment='dev';f.page.environmentError=undefined;f.page.environmentReply=undefined;setup();
+   await assert.rejects(f.service.call(name,args),error=>reason.test(error.message)&&error.message.includes('已拒绝'+action),name+' '+reason);
+  }
+ }
+ assert.ok(!['uiOpen','uiClose','language','mockSet'].some(sent),'refused commands never reach the page bridge');
+ f.page.environment='prod';f.page.environmentError=undefined;f.page.environmentReply=undefined;
+ assert.deepEqual((await f.service.call('browser_debug_ui_list',{})).data,{method:'uiList'});
+ assert.deepEqual((await f.service.call('browser_debug_language',{})).data,{current:'en'},'reading the language is not a command');
+ assert.deepEqual((await f.service.call('browser_debug_mock_list',{})).data,{method:'mockList'});
+ assert.deepEqual((await f.service.call('browser_debug_mock_clear',{transport:'rpc'})).data,{method:'mockClear'},'removing fake responses is always allowed');
+});
+test('the environment field and the allowed environments come from the settings; "*" accepts any reported environment', async t => {
+ const bridge={...defaultConfig().bridge,environmentField:'runEnv',testEnvironments:['dev','pre']};
+ const f=fixture(t,{bridge});f.page.environment='pre';
+ await f.service.call('browser_debug_mock_set',{transport:'http',name:'/api/x',response:{a:1}});
+ const query=f.evaluations.find(e=>e.includes(' in identity))'));assert.ok(query.includes('!("runEnv" in identity))')&&query.includes('identity["runEnv"]'));
+ f.page.environment='staging';await assert.rejects(f.service.call('browser_debug_ui_open',{name:'HallView'}),/staging，不在允许的测试环境（dev, pre）之列/);
+ const any=fixture(t,{bridge:{...defaultConfig().bridge,testEnvironments:['*']}});any.page.environment='prod';
+ await any.service.call('browser_debug_ui_open',{name:'HallView'});assert.ok(any.evaluations.some(e=>e.includes('api["uiOpen"]')));
+ any.page.environment=null;await assert.rejects(any.service.call('browser_debug_ui_open',{name:'HallView'}),/游戏还没有报告运行环境/,'"*" still refuses an unreported environment');
+});
+test('page commands do not need the observer: the environment check reads only the control object', async t => {
+ const f=fixture(t);f.page.observerOff=true;
+ await assert.rejects(f.service.call('browser_debug_ui_open',{name:'HallView'}),/调试采集未开启/,'the command itself still needs the observer');
+ assert.ok(f.evaluations.some(e=>e.includes(' in identity))')),'the environment was read before the observer refused');
+});
+test('the evidence export strips captured request and response bodies, as its note says', async t => {
+ const f=fixture(t);
+ f.page.entries=[{time:1,sequence:1,kind:'http-end',requestId:1,name:'POST /api/reset',outcome:'success',bodies:{request:'{"email":"player@example.com","code":"493817"}',response:'{"token":"[redacted]"}'}},{time:2,sequence:2,kind:'command',name:'uiOpen gui/hall/HallView'}];
+ const exported=await f.service.call('browser_debug_export',{screenshot:false});
+ const text=fs.readFileSync(path.join(exported.directory,'evidence.json'),'utf8'),evidence=JSON.parse(text);
+ assert.doesNotMatch(text,/493817|player@example\.com|"bodies"/,'no body content in the package');
+ assert.deepEqual(evidence.trace.entries.map(e=>[e.sequence,e.name,e.bodiesOmitted??false]),[[1,'POST /api/reset',true],[2,'uiOpen gui/hall/HallView',false]]);
+ assert.deepEqual(evidence.timeline.filter(e=>e.source==='bridge').map(e=>e.event.bodiesOmitted??false),[true,false]);
+ assert.ok(evidence.notes.some(note=>/captured request\/response bodies are omitted/.test(note)));
+ assert.equal(f.page.entries[0].bodies.request.includes('493817'),true,'the live timeline itself is untouched');
+});
+test('an unusable git-desk.config.json refuses page commands instead of falling back to the default environments', async t => {
+ const f=fixture(t,{configError:'git-desk.config.json：未知字段 clients.cursor'});f.page.environment='dev';
+ for(const [name,args] of [['browser_debug_ui_open',{name:'HallView'}],['browser_debug_language',{code:'en'}],['browser_debug_mock_set',{transport:'rpc',name:'pkg.x/Get',response:{a:1}}]])
+  await assert.rejects(f.service.call(name,args),/git-desk\.config\.json 无法使用（git-desk\.config\.json：未知字段 clients\.cursor），为避免按默认环境列表误操作，已拒绝/);
+ assert.ok(!f.evaluations.some(e=>e.includes(' in identity))')||/api\["(uiOpen|language|mockSet)"\]/.test(e)),'nothing reaches the page');
+ assert.deepEqual((await f.service.call('browser_debug_mock_clear',{})).data,{method:'mockClear'},'clearing mocks stays available');
 });

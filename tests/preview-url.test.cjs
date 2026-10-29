@@ -1,12 +1,14 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),{createRequire}=require('node:module');
 // main.js runs inside Creator; a vm with stub Editor, Git and MCP modules is enough to exercise how the preview URL is chosen.
+// main.js runs with __dirname inside a temporary extension root (static linked in), so it never reads or writes the repo's real .cache.
+function extensionDist(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'gd-main-'));fs.mkdirSync(path.join(root,'dist'));fs.symlinkSync(path.resolve(__dirname,'../static'),path.join(root,'static'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return path.join(root,'dist');}
 function load(t,{config,previewUrl,urlError}={}){
  const filename=path.resolve(__dirname,'../dist/main.js'),req=createRequire(filename),exports={},requests=[];
  const project=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'gd-preview-url-')));t.after(()=>fs.rmSync(project,{recursive:true,force:true}));
  fs.writeFileSync(path.join(project,'package.json'),JSON.stringify({uuid:'test-preview-url'}));
  if(config)fs.writeFileSync(path.join(project,'git-desk.config.json'),JSON.stringify(config));
  const stubs={'./git':{GitDesk:class{task(){return undefined;}}},'./contexts':{WorkspaceContexts:class{constructor(){this.worktrees={ready:Promise.resolve()};}running(){return false;}}},'./mcp-bridge':{startMcpBridge:async()=>({close:async()=>{}})},electron:{session:{fromPartition:()=>({})},webContents:{fromId:()=>null}}};
- vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:path.dirname(filename),console:Object.assign(Object.create(console),{info(){},warn(){},error(){},log(){}}),process,Buffer,URL,setTimeout,clearTimeout,setInterval,clearInterval,
+ vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:extensionDist(t),console:Object.assign(Object.create(console),{info(){},warn(){},error(){},log(){}}),process,Buffer,URL,setTimeout,clearTimeout,setInterval,clearInterval,
   require:Object.assign(name=>name in stubs?stubs[name]:req(name),{cache:req.cache}),
   Editor:{Project:{path:project},Panel:{has:async()=>false,open:async()=>true,focus:async()=>true,close:async()=>{},openBeside:async()=>true},
    Message:{broadcast(){},request:async(channel,message)=>{requests.push(channel+'/'+message);if(channel==='preview'&&message==='query-preview-url'){if(urlError)throw Error(urlError);return previewUrl;}return undefined;}}}});

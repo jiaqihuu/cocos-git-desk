@@ -45,3 +45,71 @@ test('hierarchy still answers without an overlay and stale sessions are refused'
  const tree=api.hierarchy({contains:'icon'});assert.equal(tree.total,1);assert.equal(tree.nodes[0].name,'Icon');
  assert.throws(()=>api.inspect('icon','old'),/preview reloaded/);
 });
+// Shaped like Creator 3.8.8: string/inputFlag/textLabel are prototype accessors over serialized fields and the box
+// renders into a child TEXT_LABEL. Here that Label holds the plaintext (the engine shows bullets) so a leak through it shows.
+function passwordFixture(){
+ class Component{constructor(){this.enabled=true;this.enabledInHierarchy=true;}}
+ class UITransform extends Component{constructor(){super();this.anchorX=0;this.anchorY=0;this.width=40;this.height=10;}getBoundingBoxToWorld(){return {x:0,y:0,width:40,height:10};}}
+ class Label extends Component{constructor(text){super();this._string=text;this.fontSize=20;}get string(){return this._string;}set string(v){this._string=v;}}
+ class EditBox extends Component{constructor(text,flag){super();this._string=text;this._inputFlag=flag;this._textLabel=null;}get string(){return this._string;}set string(v){this._string=v;}get inputFlag(){return this._inputFlag;}set inputFlag(v){this._inputFlag=v;}get textLabel(){return this._textLabel;}get placeholder(){return '输入';}}
+ Label.__props__=['string','_string','fontSize'];EditBox.__props__=['string','placeholder','textLabel','inputFlag','_string','_inputFlag','_textLabel'];EditBox.InputFlag={PASSWORD:0,SENSITIVE:1,DEFAULT:5};
+ const names={UITransform:'cc.UITransform',Label:'cc.Label',EditBox:'cc.EditBox'};
+ const cc={UITransform,Label,EditBox,Canvas:class{},Asset:class{},Node:class{},Component,Vec2:class{},Vec3:class{},isValid:()=>true,VERSION:'3.8.8',
+  js:{getClassName:v=>names[v.constructor.name]||v.constructor.name,getClassId:()=>''},view:{getVisibleSize:()=>({width:100,height:100}),getDesignResolutionSize:()=>({width:100,height:100})},director:{root:{}}};
+ const make=(uuid,name,parent,components)=>{const n={uuid,name,parent,children:[],components:[new UITransform(),...components],active:true,activeInHierarchy:true,layer:1,scale:{x:1,y:1},getComponent(type){return this.components.find(c=>c instanceof type)||null;}};for(const c of n.components)c.node=n;if(parent)parent.children.push(n);return n;};
+ const box=(uuid,text,flag,parent)=>{const edit=new EditBox(text,flag),node=make(uuid,uuid,parent,[edit]);edit._textLabel=make(uuid+'-text','TEXT_LABEL',node,[new Label(text)]).components[1];make(uuid+'-hint','PLACEHOLDER_LABEL',node,[new Label('请输入'+uuid)]);return edit;};
+ const scene=make('scene','scene',null,[]),canvas=make('canvas','Canvas',scene,[]);
+ const pwd=box('pwd','hunter2',0,canvas),user=box('user','jev-visible',5,canvas);
+ const list=[];const walk=(n,d)=>{list.push({node:n,depth:d});for(const c of n.children)walk(c,d+1);};walk(scene,0);
+ const logs=[],element=()=>({style:{},children:[],setAttribute(){},addEventListener(){},append(...items){this.children.push(...items);},remove(){}});
+ const window={innerWidth:100,innerHeight:100,console:{log:line=>logs.push(String(line))},addEventListener(){},removeEventListener(){},setInterval:()=>1,clearInterval(){}};
+ const api=factory({cc,scan:()=>({nodes:list,scanLimitReached:false}),safeText:v=>String(v),sessionId:'s1',document:{body:{append(){}},createElement:element,querySelector:()=>null},window});
+ return {api,pwd,user,logs};
+}
+const fieldOf=(component,name)=>component.fields.find(field=>field.name===name);
+test('a password EditBox never echoes its text through inspect, read, print, snapshots, layout or its text Label',()=>{
+ const {api,pwd,logs}=passwordFixture(),mask='[password hidden, length 7]';
+ const leak=(value,what)=>assert.equal(JSON.stringify(value).includes('hunter2'),false,what+' leaked the password');
+ const detail=api.inspect('pwd','s1',{});leak(detail,'inspect');leak(api.inspect('pwd','s1',{all:true}),'inspect all');
+ const edit=detail.components.find(c=>c.type==='cc.EditBox');
+ same(fieldOf(edit,'_string'),{name:'_string',value:mask,editable:false});assert.equal(fieldOf(edit,'string').getter,true,'the accessor still waits for an explicit read');
+ assert.equal(api.read('pwd',edit.id,'string','s1'),mask);assert.equal(api.read('pwd',edit.id,'_string','s1'),mask);
+ const cached=api.inspect('pwd','s1',{componentId:edit.id}).component;leak(cached,'cached read');same(fieldOf(cached,'string'),{name:'string',accessor:true,editable:false,value:mask});
+ leak(api.print('pwd','','s1',{snapshot:true}),'node print');const printed=api.print('pwd',edit.id,'s1',{snapshot:true});leak(printed,'component print');assert.equal(fieldOf(printed.data,'_string').value,mask);leak(logs,'console line');
+ api.select('pwd','s1');leak(api.snapshot({components:[edit.id]}),'snapshot');
+ const text=api.inspect('pwd-text','s1',{}),label=text.components.find(c=>c.type==='cc.Label');leak(text,'text Label');assert.equal(fieldOf(label,'_string').value,mask);
+ assert.equal(api.read('pwd-text',label.id,'string','s1'),mask);leak(api.print('pwd-text',label.id,'s1',{snapshot:true}),'text Label print');
+ const rows=api.layout({includeText:true}).nodes;leak(rows,'layout');assert.equal(rows.find(r=>r.uuid==='pwd-text').text,mask);assert.equal(rows.find(r=>r.uuid==='pwd-hint').text,'请输入pwd','the placeholder Label stays readable');
+ assert.throws(()=>api.edit({uuid:'pwd',id:edit.id,field:'string',value:'x',expected:mask},'s1'),/password box/i);
+ assert.throws(()=>api.edit({uuid:'pwd-text',id:label.id,field:'string',value:'x',expected:mask},'s1'),/password box/i);assert.equal(pwd.string,'hunter2','a refused edit leaves the box untouched');api.close();
+});
+test('the inspector cannot turn a password EditBox into a plain one to read it',()=>{
+ const {api,pwd}=passwordFixture();
+ const edit=api.inspect('pwd','s1',{}).components.find(c=>c.type==='cc.EditBox');
+ assert.equal(api.read('pwd',edit.id,'inputFlag','s1'),0);
+ const flag=fieldOf(api.inspect('pwd','s1',{componentId:edit.id}).component,'inputFlag');assert.equal(flag.value,0);assert.equal(flag.editable,false);
+ assert.throws(()=>api.edit({uuid:'pwd',id:edit.id,field:'inputFlag',value:5,expected:0},'s1'),/password box/i);
+ assert.throws(()=>api.edit({uuid:'pwd',id:edit.id,field:'_inputFlag',value:5,expected:0},'s1'),/password box/i);
+ assert.equal(pwd.inputFlag,0);assert.equal(api.read('pwd',edit.id,'string','s1'),'[password hidden, length 7]');
+ const plain=api.inspect('user','s1',{}).components.find(c=>c.type==='cc.EditBox');api.read('user',plain.id,'inputFlag','s1');
+ assert.equal(fieldOf(api.inspect('user','s1',{componentId:plain.id}).component,'inputFlag').editable,true,'a normal box can still change its input flag');api.close();
+});
+test('a normal EditBox stays readable and editable; a read cached before it turns into a password box is masked',()=>{
+ const {api,user}=passwordFixture();
+ const edit=api.inspect('user','s1',{}).components.find(c=>c.type==='cc.EditBox');
+ assert.equal(fieldOf(edit,'_string').value,'jev-visible');assert.equal(api.read('user',edit.id,'string','s1'),'jev-visible');
+ assert.match(JSON.stringify(api.print('user',edit.id,'s1',{snapshot:true})),/jev-visible/);
+ assert.equal(fieldOf(api.inspect('user-text','s1',{}).components.find(c=>c.type==='cc.Label'),'_string').value,'jev-visible');
+ assert.equal(api.layout({includeText:true}).nodes.find(r=>r.uuid==='user-text').text,'jev-visible');
+ assert.equal(api.edit({uuid:'user',id:edit.id,field:'string',value:'retyped',expected:'jev-visible'},'s1'),true);assert.equal(user.string,'retyped');
+ assert.equal(api.read('user',edit.id,'string','s1'),'retyped');user.inputFlag=0;
+ const after=api.inspect('user','s1',{componentId:edit.id}).component;
+ same(fieldOf(after,'string'),{name:'string',accessor:true,editable:false,value:'[password hidden, length 7]'});assert.equal(JSON.stringify(after).includes('retyped'),false);api.close();
+});
+test('undo cannot turn a box that became a password box back into a plain one',()=>{
+ const {api,user}=passwordFixture();
+ const edit=api.inspect('user','s1',{}).components.find(c=>c.type==='cc.EditBox');
+ api.read('user',edit.id,'inputFlag','s1');assert.equal(api.edit({uuid:'user',id:edit.id,field:'inputFlag',value:0,expected:5},'s1'),true,'a plain box may become a password box');
+ assert.throws(()=>api.undo('s1'),/password box/i);assert.equal(user.inputFlag,0,'the refused undo leaves it a password box');
+ assert.equal(api.read('user',edit.id,'string','s1'),'[password hidden, length 11]');api.close();
+});

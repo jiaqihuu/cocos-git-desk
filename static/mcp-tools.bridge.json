@@ -198,7 +198,7 @@
   },
   {
     "name": "browser_debug_ui_open",
-    "description": "Open a game view by name (last prefab path segment), full prefab path, or numeric view id (uiid), optionally with JSON args, through the project page bridge, as the game itself would. Preview only; the view loads asynchronously, confirm with hierarchy. Use only within the task the person authorized.",
+    "description": "Open a game view by name (last prefab path segment), full prefab path, or numeric view id (uiid), optionally with JSON args, through the project page bridge, as the game itself would. Preview only; the view loads asynchronously, confirm with hierarchy. Use only within the task the person authorized. Runs only when the page bridge reports an environment listed in bridge.testEnvironments (git-desk.config.json, default dev, test, staging); refuses on any other value and when the environment cannot be read.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -228,7 +228,7 @@
   },
   {
     "name": "browser_debug_ui_close",
-    "description": "Close a game view by name, prefab path or numeric view id (uiid), through the project page bridge. Preview only.",
+    "description": "Close a game view by name, prefab path or numeric view id (uiid), through the project page bridge. Preview only. Runs only when the page bridge reports an environment listed in bridge.testEnvironments (git-desk.config.json, default dev, test, staging); refuses on any other value and when the environment cannot be read.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -255,7 +255,7 @@
   },
   {
     "name": "browser_debug_language",
-    "description": "Without code: read the current language and the available list. With code: switch the game language (reloads language assets). Preview only.",
+    "description": "Without code: read the current language and the available list. With code: switch the game language (reloads language assets). Preview only. Switching (with code) runs only when the page bridge reports an environment listed in bridge.testEnvironments (git-desk.config.json, default dev, test, staging); refuses on any other value and when the environment cannot be read.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -277,7 +277,7 @@
   },
   {
     "name": "browser_debug_mock_set",
-    "description": "Register a preview-only fake response for one unary RPC method (transport rpc, name = full method such as pkg.v1.Service/Method) or one HTTP request path (transport http, name = path; optional method). Hits skip the real request and are written to the timeline as mock-hit. fail=true returns the same shape the game sees on a real failure as reported by the project page bridge; once removes the mock after the first hit; delayMs ≤ 10000. What can be mocked is decided by the project page bridge; cleared when the observer is disabled or the page reloads.",
+    "description": "Register a preview-only fake response for one unary RPC method (transport rpc, name = full method such as pkg.v1.Service/Method) or one HTTP request path (transport http, name = path; optional method). Hits skip the real request and are written to the timeline as mock-hit. fail=true returns the same shape the game sees on a real failure as reported by the project page bridge; once removes the mock after the first hit; delayMs ≤ 10000. What can be mocked is decided by the project page bridge; cleared when the observer is disabled or the page reloads. Runs only when the page bridge reports an environment listed in bridge.testEnvironments (git-desk.config.json, default dev, test, staging); refuses on any other value and when the environment cannot be read.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -354,7 +354,7 @@
   },
   {
     "name": "browser_debug_mock_clear",
-    "description": "Remove one mock (transport + name) or, without arguments, all mocks.",
+    "description": "Remove mocks: transport + name removes one, transport alone removes all mocks of that transport, no arguments removes all; name without transport is rejected.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -399,7 +399,7 @@
   },
   {
     "name": "browser_debug_capture_bodies",
-    "description": "Opt in to keeping RPC/HTTP request and response bodies in the preview timeline (browser_debug_timeline), redacted for secret-looking keys and bounded to 4 KB each. Off by default and after a page reload; disable when done.",
+    "description": "Opt in to keeping RPC/HTTP request and response bodies in the preview timeline (browser_debug_timeline), redacted for secret-looking keys and bounded to 4 KB each. Off by default and after a page reload; disable when done. Which requests keep bodies and how text bodies are redacted is up to the project page bridge; bodies never go into browser_debug_export.",
     "inputSchema": {
       "type": "object",
       "properties": {

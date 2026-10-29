@@ -1,4 +1,4 @@
-import { BrowserDebugFeedback } from './browser-debug-feedback';
+import { BrowserDebugFeedback, TransientNotice } from './browser-debug-feedback';
 import { t } from './i18n';
 import { localizeElement } from './panel-i18n';
 import { LatestRead } from './latest-read';
@@ -303,6 +303,7 @@ class Controller {
     private refreshing = false;
     private closed = false;
     private browserDebugFeedback?: BrowserDebugFeedback;
+    private browserDebugNotice?: TransientNotice;
     private timer?: ReturnType<typeof setTimeout>;
     private plan?: Plan;
     private readonly warningPreferences = new WarningPreferences();
@@ -492,11 +493,12 @@ class Controller {
         this.el(id).addEventListener('click', () => { void this.guard(async () => { await work(); }); }, { signal: this.listenerScope?.signal });
     }
     private bind(): void {
-        this.browserDebugFeedback = new BrowserDebugFeedback((message, pending) => {
+        this.browserDebugNotice?.dispose();
+        this.browserDebugNotice = new TransientNotice(this.el('browser-debug-feedback'));
+        this.browserDebugFeedback = new BrowserDebugFeedback((message, pending, failed) => {
             if (this.closed) return;
             for (const button of this.app.querySelectorAll<HTMLButtonElement>('#browser-debug-menu button')) button.disabled = pending;
-            this.el('browser-debug-feedback').textContent = message;
-            this.el('browser-debug-feedback').hidden = false;
+            this.browserDebugNotice?.show(message, pending, failed);
             this.el('browser-debug-menu-status').textContent = message;
         });
         const runDebug = (label: string, method: string, ...args: unknown[]) => this.browserDebugFeedback!.run(label, () => request<string>(method, ...args));
@@ -4116,7 +4118,7 @@ class Controller {
 
     close(): void {
         if (this.closed) return;
-        this.closed = true; this.browserDebugFeedback?.dispose();
+        this.closed = true; this.browserDebugFeedback?.dispose(); this.browserDebugNotice?.dispose();
         this.listenerScope?.abort();
         Editor.Message.removeBroadcastListener('cocos-git-desk:scope-review-requested', this.scopeReviewRequested);
         if (this.scopeReviewExpiry) clearTimeout(this.scopeReviewExpiry);

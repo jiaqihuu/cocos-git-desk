@@ -9,7 +9,7 @@ test('a missing git-desk.config.json means the documented defaults',t=>{
  const root=temp(t);
  assert.deepEqual(config.loadConfig(root),{
   preview:{url:null,engineVersions:['3.8.x']},
-  bridge:{controlName:'__COCOS_GIT_DESK_PREVIEW_CONTROL__',debugName:'__COCOS_GIT_DESK_DEBUG__',apiVersion:'cocos-git-desk-preview-bridge/1'},
+  bridge:{controlName:'__COCOS_GIT_DESK_PREVIEW_CONTROL__',debugName:'__COCOS_GIT_DESK_DEBUG__',apiVersion:'cocos-git-desk-preview-bridge/1',environmentField:'environment',testEnvironments:['dev','test','staging']},
   revision:{roots:['assets','extensions/*/assets']},
   i18n:{keyPattern:null,directory:'assets/resources/language/json',languages:[],csvLayout:'perKey',csvColumns:['key','en','zh'],csvStatus:{missing:'missing',present:'present'}},
   clients:[]});
@@ -21,7 +21,7 @@ test('given fields replace the defaults section by section; the rest keeps its d
  write(path.join(root,'git-desk.config.json'),{preview:{url:'http://127.0.0.1:7457/'},bridge:{controlName:'__MY_CONTROL__'},revision:{roots:['assets/','packages/*/assets']},i18n:{keyPattern:'\\btxt_[a-z0-9_]+\\b',languages:['en','th'],csvColumns:['key','usage','th']},clients:['claude-code','codex','codex']});
  const loaded=config.loadConfig(root);
  assert.equal(loaded.preview.url,'http://127.0.0.1:7457/');assert.deepEqual(loaded.preview.engineVersions,['3.8.x']);
- assert.deepEqual(loaded.bridge,{controlName:'__MY_CONTROL__',debugName:'__COCOS_GIT_DESK_DEBUG__',apiVersion:'cocos-git-desk-preview-bridge/1'});
+ assert.deepEqual(loaded.bridge,{controlName:'__MY_CONTROL__',debugName:'__COCOS_GIT_DESK_DEBUG__',apiVersion:'cocos-git-desk-preview-bridge/1',environmentField:'environment',testEnvironments:['dev','test','staging']});
  assert.deepEqual(loaded.revision.roots,['assets','packages/*/assets'],'trailing slashes are dropped');
  assert.equal(loaded.i18n.keyPattern,'\\btxt_[a-z0-9_]+\\b');assert.equal(loaded.i18n.directory,'assets/resources/language/json');assert.deepEqual(loaded.i18n.languages,['en','th']);
  assert.deepEqual(loaded.clients,['claude-code','codex'],'duplicates are dropped');
@@ -40,6 +40,10 @@ test('invalid files and fields are refused with a MessageError naming the key',t
  refuse({preview:{engineVersions:['latest']}},'main.configFieldInvalid','preview.engineVersions');
  refuse({bridge:{controlName:'window.x'}},'main.configFieldInvalid','bridge.controlName');
  refuse({bridge:{apiVersion:''}},'main.configFieldInvalid','bridge.apiVersion');
+ refuse({bridge:{environmentField:'identity.env'}},'main.configFieldInvalid','bridge.environmentField');
+ refuse({bridge:{testEnvironments:[]}},'main.configFieldInvalid','bridge.testEnvironments');
+ refuse({bridge:{testEnvironments:['dev','']}},'main.configFieldInvalid','bridge.testEnvironments');
+ assert.deepEqual(config.validateConfig({bridge:{environmentField:'runEnv',testEnvironments:['dev','pre']}}).bridge,{controlName:'__COCOS_GIT_DESK_PREVIEW_CONTROL__',debugName:'__COCOS_GIT_DESK_DEBUG__',apiVersion:'cocos-git-desk-preview-bridge/1',environmentField:'runEnv',testEnvironments:['dev','pre']});
  for(const root of ['/abs','../up','a/../b','a\\b','as*ets','C:/x'])refuse({revision:{roots:[root]}},'main.configFieldInvalid','revision.roots');
  refuse({i18n:{keyPattern:'('}},'creator.languageKeyPatternInvalid');
  refuse({i18n:{keyPattern:5}},'main.configFieldInvalid','i18n.keyPattern');

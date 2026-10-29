@@ -439,7 +439,8 @@ test('Creator adapter blocks worktree changes in Prefab mode even when both dirt
     let prefab = true;
     globalThis.Editor = {
         Project: { path: repo },
-        Panel: { has: async () => true, open: async () => true, close: async () => {} },
+        // No debug preview tab: unload would otherwise leave its reopen marker in this extension's real .cache.
+        Panel: { has: async name => name !== 'cocos-git-desk.debug-preview', open: async () => true, close: async () => {} },
         Message: { async request(target, method) {
             if (target === 'scene' && method === 'query-dirty') return false;
             if (target === 'scene' && method === 'multi-scene-query') return [{ uuid: 'fixture-scene', name: 'Fixture', dirty: false, type: prefab ? 'prefab' : 'scene' }];

@@ -58,6 +58,8 @@ The `runtime_inspector_*` tools use the same collection hub as the panels; the D
 - Each frame call combines the readiness check and the call into one evaluation. Node lookups reuse the last scan's index and validate with `isValid`.
 - The main process routes calls only to the current Debug Preview web contents' frame and offers no generic script IPC. Runtime operations verify the page session and node/component identity; references from before a reload are invalid.
 - Closing or switching target removes the DOM pick layer, timers, listeners and render hooks.
+- A password `EditBox` never shows its text: `string`/`_string` of the box and of the label it renders into report only the length in the panels, `inspect`, `print`, field reads and `layout` text, and its input type cannot be edited. A page keeps the inspector it was loaded with until it reloads. For a page that still runs an older inspector, the main process masks the `EditBox` component's own `string`/`_string` in the panels, `inspect`, `print` and field reads, but not the separate label node or `layout` text; reload the preview after upgrading.
+- Reloading the extension (Extension Manager or `creator_reload_extension`) closes an open Debug Preview tab and reopens it on the new code. If the panel loses its binding otherwise, for example after the page's debugger was detached, it binds the same page again without reloading the game.
 - Scan limits: 10,000 nodes, 200 per page, 40 components per node, 80 public fields per component; arrays show the first 16 items; nested objects are not walked. GPU calls and UI commits are capped at 10,000 entries each; the report says when it is incomplete. Truncation is shown in the UI; the full object is available in DevTools.
 
 ## Not covered

@@ -11,6 +11,7 @@ import { ReflogQuery, ReflogPage } from './types';
 import { RemoteQuery, RemotePage } from './types';
 import path from 'path';
 import os from 'os';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import type { Task, RemoteCheckResult } from './types';
 import { WorkspaceContexts } from './contexts';
 import { t, MessageError } from './i18n';
@@ -22,15 +23,15 @@ let creator: CreatorTools | undefined;
 const extensionLog = new ExtensionLog(console);
 const latestReports = new Map<string, { time: string; report: unknown }>();
 let hub: RuntimeInspectorHub | undefined;
-let config: GitDeskConfig | undefined;
+let config: GitDeskConfig | undefined, configError: string | null = null;
 let creatorPreviewUrl: Promise<string | null> | undefined, resolvedPreviewUrl: string | null | undefined;
 let catalogue: ToolSchema[] | undefined;
 const cacheDir = () => path.resolve(__dirname, '../.cache');
 // git-desk.config.json at the project root; an invalid file is reported once and the defaults are used.
 function projectConfig(): GitDeskConfig {
     if (!config) {
-        try { config = loadConfig(Editor.Project.path); }
-        catch (error) { extensionLog.issue('config', reason(error)); extensionLog.console.error(t('main.configLoadFailed', { error: reason(error) })); config = defaultConfig(); }
+        try { config = loadConfig(Editor.Project.path); configError = null; }
+        catch (error) { configError = reason(error); extensionLog.issue('config', configError); extensionLog.console.error(t('main.configLoadFailed', { error: configError })); config = defaultConfig(); }
     }
     return config;
 }
@@ -64,7 +65,9 @@ const sameUrl = (a: string, b: string): boolean => { try { const x = new URL(a),
 function tools(): ToolSchema[] { return catalogue ||= toolCatalogue(projectConfig()); }
 function debugSettings() {
     const cfg = projectConfig(), id = projectId(Editor.Project.path), local = loadLocalSettings(cacheDir(), id);
-    return { projectId: id, bridge: cfg.bridge, revisionRoots: cfg.revision.roots, stateDir: local.debug.stateDir, outputDir: local.debug.outputDir };
+    // The defaults stand in for an unusable file everywhere except the environment allow-list: page commands are
+    // refused until the file is fixed, so a broken file never widens the environments a project narrowed.
+    return { projectId: id, bridge: cfg.bridge, configError, revisionRoots: cfg.revision.roots, stateDir: local.debug.stateDir, outputDir: local.debug.outputDir };
 }
 const inspectorPanels=['cocos-git-desk.runtime-hierarchy','cocos-git-desk.runtime-properties','cocos-git-desk.runtime-inspector'] as const;
 function inspectorPreview():EmbeddedPreview {
@@ -165,7 +168,7 @@ function creatorTools():CreatorTools {
                 if(!target)throw new MessageError('main.extensionNotFound',{name,loaded:list.map(item=>item?.name||item?.info?.name).filter(Boolean).slice(0,20).join(t('main.listSeparator'))});
             }
             const delayMs=400;
-            setTimeout(()=>{ Editor.Message.request('extension','reload',target).catch(error=>extensionLog.console.error(t('main.reloadFailed',{error:String((error as Error)?.message??error)}))); },delayMs);
+            setTimeout(()=>{ if(name==='cocos-git-desk')selfReload=true; Editor.Message.request('extension','reload',target).catch(error=>{ if(name==='cocos-git-desk')selfReload=false; extensionLog.console.error(t('main.reloadFailed',{error:String((error as Error)?.message??error)})); }); },delayMs);
             return {name,path:target,scheduled:true,delayMs};
         },
     },tools());
@@ -332,7 +335,46 @@ async function navigateFile(repo: string, name: string, action: EditorFileAction
     return result;
 }
 
-export function load(): void { startServices(); }
+// Creator's extension reload keeps an open debug preview tab on its old panel code, with nothing bound in the new
+// main process. Unload closes the tab and leaves this marker; the next load reopens the tab once if it is fresh.
+const previewPanel = 'cocos-git-desk.debug-preview';
+// One marker per project: a global install shared by several projects must not reopen the tab in another one.
+const reopenMarker = () => { let id = ''; try { id = projectId(Editor.Project.path); } catch {} return path.join(cacheDir(), 'debug-preview-reopen' + (id ? '-' + id : '')); };
+let reopenTimer: ReturnType<typeof setTimeout> | undefined;
+// An unload during quit leaves the tab to Creator's saved layout. Quitting through the editor window's close button
+// reaches before-quit only after the window has closed, so that close counts as quitting too. A reload this extension
+// requested itself (creator_reload_extension) always reopens, even after a cancelled window close.
+let quitting = false, selfReload = false;
+type Closable = { on(event: string, fn: () => void): unknown; removeListener(event: string, fn: () => void): unknown; isDestroyed?(): boolean };
+let editorWindow: Closable | undefined;
+const onQuit = () => { quitting = true; };
+function watchQuit(on: boolean): void {
+    try {
+        const { app, BrowserWindow } = require('electron') as { app: Closable; BrowserWindow?: { getAllWindows?(): Array<Closable & { getTitle(): string }> } };
+        app.removeListener('before-quit', onQuit); if (editorWindow && !editorWindow.isDestroyed?.()) editorWindow.removeListener('close', onQuit); editorWindow = undefined;
+        if (!on) return;
+        app.on('before-quit', onQuit);
+        const windows = BrowserWindow?.getAllWindows?.() ?? [];
+        editorWindow = windows.find(window => /cocos creator/i.test(window.getTitle())) ?? windows[0]; editorWindow?.on('close', onQuit);
+    } catch {}
+}
+// Reads and consumes the marker; should this load run before the old unload wrote it, it looks once more.
+function reopenFromMarker(retry: boolean): void {
+    let closedAt = NaN;
+    try { closedAt = Number(readFileSync(reopenMarker(), 'utf8')); rmSync(reopenMarker(), { force: true }); } catch {}
+    const age = Date.now() - closedAt;
+    if (age >= 0 && age < 120000) reopenTimer = setTimeout(() => {
+        reopenTimer = undefined;
+        void methods.browserDebugOpen().then(result => { if (!result.ok) notice('warn', t('main.previewReopenFailed', { error: result.error })); });
+    }, 500);
+    else if (retry) reopenTimer = setTimeout(() => { reopenTimer = undefined; reopenFromMarker(false); }, 2000);
+}
+export function load(): void {
+    startServices();
+    quitting = false; selfReload = false;
+    watchQuit(true);
+    reopenFromMarker(true);
+}
 function startServices(): void {
     if (enabled) return;
     enabled = true;
@@ -348,8 +390,19 @@ function startServices(): void {
         })).catch(error => { extensionLog.console.error(t('main.mcpNotStarted'), error); return undefined; });
 }
 export async function unload(): Promise<void> {
-    enabled = false;
+    clearTimeout(reopenTimer); reopenTimer = undefined;
+    // The MCP port is released first, so a load that does not wait for this unload can bind it again.
     await (await mcpStartup)?.close(); mcpStartup = undefined;
+    // Closed before the services stop, so the tab releases its page the usual way. The quit check follows an
+    // await, so a before-quit emitted along with this unload has been seen.
+    try {
+        if (await Editor.Panel.has(previewPanel) && (selfReload || !quitting)) {
+            mkdirSync(path.dirname(reopenMarker()), { recursive: true }); writeFileSync(reopenMarker(), String(Date.now()));
+            await Editor.Panel.close(previewPanel);
+        }
+    } catch (error) { extensionLog.console.warn(t('main.previewCloseOnUnloadFailed', { error: reason(error) })); }
+    watchQuit(false); selfReload = false;
+    enabled = false;
     while (editorPreparing || remoteProbePending || contexts?.running() || service?.task()?.status === 'running') await new Promise<void>(resolve => setTimeout(resolve, 200));
     if (paused) { await Editor.Message.request('asset-db', 'resume'); paused = false; }
     closeHub();

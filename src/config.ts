@@ -22,7 +22,7 @@ export const perLanguageCsvColumns: readonly string[] = ['key', 'usage', 'langua
 
 export interface GitDeskConfig {
     preview: { url: string | null; engineVersions: string[] };
-    bridge: { controlName: string; debugName: string; apiVersion: string };
+    bridge: { controlName: string; debugName: string; apiVersion: string; environmentField: string; testEnvironments: string[] };
     revision: { roots: string[] };
     i18n: { keyPattern: string | null; directory: string; languages: string[]; csvLayout: CsvLayout; csvColumns: CsvColumn[]; csvStatus: { missing: string; present: string } };
     clients: ClientName[];
@@ -35,7 +35,7 @@ export const catalogueNames: readonly CatalogueName[] = ['core', 'inspector', 'b
 export function defaultConfig(): GitDeskConfig {
     return {
         preview: { url: null, engineVersions: ['3.8.x'] },
-        bridge: { controlName: '__COCOS_GIT_DESK_PREVIEW_CONTROL__', debugName: '__COCOS_GIT_DESK_DEBUG__', apiVersion: 'cocos-git-desk-preview-bridge/1' },
+        bridge: { controlName: '__COCOS_GIT_DESK_PREVIEW_CONTROL__', debugName: '__COCOS_GIT_DESK_DEBUG__', apiVersion: 'cocos-git-desk-preview-bridge/1', environmentField: 'environment', testEnvironments: ['dev', 'test', 'staging'] },
         revision: { roots: ['assets', 'extensions/*/assets'] },
         i18n: { keyPattern: null, directory: 'assets/resources/language/json', languages: [], csvLayout: 'perKey', csvColumns: ['key', 'en', 'zh'], csvStatus: { missing: 'missing', present: 'present' } },
         clients: [],
@@ -96,8 +96,8 @@ export function validateConfig(raw: unknown): GitDeskConfig {
         config.preview.engineVersions = stringList(preview.engineVersions, 'preview.engineVersions', false);
         if (config.preview.engineVersions.some(item => !versionPattern.test(item))) throw invalid('preview.engineVersions', 'versions such as "3.8.x" or "3.8.8"');
     }
-    const bridge = section(raw, 'bridge', ['controlName', 'debugName', 'apiVersion']);
-    for (const key of ['controlName', 'debugName'] as const) {
+    const bridge = section(raw, 'bridge', ['controlName', 'debugName', 'apiVersion', 'environmentField', 'testEnvironments']);
+    for (const key of ['controlName', 'debugName', 'environmentField'] as const) {
         if (bridge[key] === undefined) continue;
         if (typeof bridge[key] !== 'string' || !identifier.test(bridge[key] as string)) throw invalid('bridge.' + key, 'JavaScript identifier');
         config.bridge[key] = bridge[key] as string;
@@ -105,6 +105,11 @@ export function validateConfig(raw: unknown): GitDeskConfig {
     if (bridge.apiVersion !== undefined) {
         if (typeof bridge.apiVersion !== 'string' || !bridge.apiVersion || bridge.apiVersion.length > 128) throw invalid('bridge.apiVersion', 'non-empty string');
         config.bridge.apiVersion = bridge.apiVersion;
+    }
+    // Page commands run only on these environments; "*" accepts any environment the page reports, never an unreported one.
+    if (bridge.testEnvironments !== undefined) {
+        config.bridge.testEnvironments = stringList(bridge.testEnvironments, 'bridge.testEnvironments', false);
+        if (config.bridge.testEnvironments.some(item => item.length > 64)) throw invalid('bridge.testEnvironments', 'non-empty string[] of names up to 64 characters');
     }
     const revision = section(raw, 'revision', ['roots']);
     if (revision.roots !== undefined) config.revision.roots = stringList(revision.roots, 'revision.roots', false).map(item => relativePath(item, 'revision.roots', true));

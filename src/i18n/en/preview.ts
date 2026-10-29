@@ -1,6 +1,10 @@
 import { register } from '../registry';
 // Domain: preview. English texts; every key in ../zh/preview.ts must exist here.
 register('en', {
+    'preview.actionLanguage': 'switching the language',
+    'preview.actionMockSet': 'registering the mock response',
+    'preview.actionUiClose': 'closing the view',
+    'preview.actionUiOpen': 'opening the view',
     'preview.argsNotObject': 'Tool arguments must be a JSON object',
     'preview.argMissing': 'Missing argument: {key}',
     'preview.argUnknown': 'Unknown argument: {key}',
@@ -11,6 +15,12 @@ register('en', {
     'preview.argJsonArray': 'Argument must be a JSON array (at most 200 items, 64 KB): {key}',
     'preview.argStringArray': 'Argument must be an array of strings: {key}',
     'preview.argObject': 'Argument must be a JSON object of at most 16 KB: {key}',
+    'preview.environmentConfigInvalid': 'git-desk.config.json cannot be used ({error}); refused {action} rather than falling back to the default environment list. Fix the file, then reload the extension',
+    'preview.environmentFieldMissing': 'The preview bridge identity() does not report the environment field {field}; update the project preview bridge or set bridge.environmentField in git-desk.config.json and reload the extension, then reload the preview',
+    'preview.environmentNotReported': 'The game has not reported its environment yet; refused {action}. Retry once the game has loaded its configuration',
+    'preview.environmentRefused': 'The preview environment is {environment}, not one of the allowed test environments ({allowed}); refused {action}. Switch the game to a test environment, or adjust bridge.testEnvironments in git-desk.config.json and reload the extension',
+    'preview.environmentUnreadable': 'Cannot confirm the preview environment ({error}); refused {action} so a production environment is never changed by mistake. Check that the debug preview is connected and the game has started, then retry',
+    'preview.mockClearNeedsTransport': 'Clearing a mock by name needs transport (rpc or http) as well; transport alone clears all mocks of that transport, no arguments clear all',
     'preview.preferenceInvalid': 'The local debug preference file is invalid',
     'preview.bridgeControlMissing': 'The page has not loaded the project preview bridge (window.{name} is missing)',
     'preview.bridgeMismatch': 'Preview bridge api version or project does not match',

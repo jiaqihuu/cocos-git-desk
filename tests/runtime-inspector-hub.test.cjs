@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {RuntimeInspectorHub,formatPrint}=require('../dist/runtime-inspector-hub');
+const {RuntimeInspectorHub,formatPrint,maskPasswords}=require('../dist/runtime-inspector-hub');
 const flush=async()=>{for(let i=0;i<6;i++)await new Promise(resolve=>setImmediate(resolve));};
 const snapshot=(over={})=>({sessionId:'s',selected:'',nodes:[],candidates:[],candidateCount:0,detail:null,offset:0,total:0,scanLimitReached:false,picking:false,digest:'d1',...over});
 function fixture(t,options={}){
@@ -124,4 +124,53 @@ test('a poll failure while the game loads shows a quiet waiting message that the
  assert.equal(f.hub.state().message,'The inspector supports Cocos Creator 3.8.x; found 3.7.4','a real failure is shown as it is');assert.equal(f.hub.state().waiting,false);
  fail=null;await f.hub.refresh(true);await flush();
  assert.equal(f.hub.state().message,'');assert.equal(f.hub.state().waiting,false);assert.equal(f.hub.state().snapshot.sessionId,'s');
+});
+// The real page inspector behind the hub, so the test covers what reaches panels, AI tools and the Creator console.
+function pageInspector(){
+ const runtime={exports:{}};require('node:vm').runInNewContext(require('node:fs').readFileSync(require('node:path').resolve(__dirname,'../browser-debug/inspector-runtime.js'),'utf8'),{module:runtime});
+ class Component{constructor(){this.enabled=true;this.enabledInHierarchy=true;}}
+ class EditBox extends Component{constructor(text,flag){super();this._string=text;this._inputFlag=flag;}get string(){return this._string;}get inputFlag(){return this._inputFlag;}get textLabel(){return null;}}
+ EditBox.__props__=['string','inputFlag','_string','_inputFlag'];EditBox.InputFlag={PASSWORD:0,DEFAULT:5};
+ const nodes=[],make=(uuid,parent,components)=>{const node={uuid,name:uuid,parent,children:[],components,active:true,activeInHierarchy:true,getComponent(type){return components.find(c=>c instanceof type)||null;}};for(const c of components)c.node=node;if(parent)parent.children.push(node);nodes.push({node,depth:parent?1:0});return node;};
+ const root=make('root',null,[]);make('pwd',root,[new EditBox('hunter2',0)]);make('user',root,[new EditBox('jev-visible',5)]);
+ const element=()=>({style:{},children:[],setAttribute(){},addEventListener(){},append(...items){this.children.push(...items);},remove(){}});
+ return runtime.exports({cc:{Component,EditBox,UITransform:class{},Canvas:class{},Asset:class{},Node:class{},Vec2:class{},Vec3:class{},isValid:()=>true,js:{getClassName:v=>'cc.'+v.constructor.name,getClassId:()=>''},director:{}},
+  scan:()=>({nodes,scanLimitReached:false}),safeText:String,sessionId:'s',document:{body:{append(){}},createElement:element,querySelector:()=>null},window:{console:{log(){}},addEventListener(){},removeEventListener(){},setInterval:()=>1,clearInterval(){}}});
+}
+test('password EditBox text never reaches inspect, read, print output, the console text or published snapshots; a normal box still does',async t=>{
+ t.mock.timers.enable({apis:['setInterval','Date']});
+ const page=pageInspector(),outputs=[],published=[];
+ const hub=new RuntimeInspectorHub({frames:async()=>[{id:'main',name:'main',url:'http://localhost/'}],call:async(id,method,args)=>page[method](...args)},state=>published.push(state),record=>outputs.push(record));t.after(()=>hub.close());
+ hub.setViewer('properties',true);await flush();
+ for(const [uuid,text,shown] of [['pwd','hunter2',false],['user','jev-visible',true]]){
+  const inspected=await hub.query('inspect',[uuid,'s',{}]),id=inspected.components.find(c=>c.type==='cc.EditBox').id;
+  assert.equal(await hub.action('print',[uuid,id,'s']),true);
+  await hub.action('select',[uuid,'s']);hub.update({component:{id,open:true}});await flush();await hub.refresh(true);
+  const read=await hub.read(uuid,id,'string'),detail=hub.state().snapshot.detail;assert.equal(detail.uuid,uuid);
+  for(const [what,value] of Object.entries({inspect:inspected,read,print:outputs.at(-1),console:formatPrint(outputs.at(-1)),lastPrint:hub.lastPrint(),snapshot:detail}))
+   assert.equal(JSON.stringify(value).includes(text),shown,`${what} of ${uuid}`);
+  if(!shown){assert.equal(read,'[password hidden, length 7]');assert.match(formatPrint(outputs.at(-1)),/"value": "\[password hidden, length 7\]"/);assert.equal(JSON.stringify(published).includes(text),false,'published states');}
+ }
+});
+test('EditBox data from a page still running an older inspector is masked before panels, tools and the console get it',async t=>{
+ const mask='[password hidden, length 7]',leak=(value,what)=>assert.equal(JSON.stringify(value).includes('hunter2'),false,what);
+ const box=(text,flag)=>({id:'c1',type:'cc.EditBox',script:'',enabled:true,enabledInHierarchy:true,fieldsLimited:false,fields:[{name:'string',accessor:true,editable:true,value:text},{name:'_string',value:text,editable:false},{name:'_inputFlag',value:flag,editable:false},{name:'placeholder',getter:true,editable:false,value:'[accessor: click to read]'}]});
+ let component=box('hunter2',0);const detail=()=>({uuid:'n1',name:'n1',path:'n1',components:[component]});
+ const page={snapshot:()=>snapshot({selected:'n1',detail:detail(),digest:'old'}),inspect:()=>({sessionId:'s',...detail()}),print:()=>({kind:'组件',name:'cc.EditBox',path:'n1',data:component}),read:()=>component.fields[0].value};
+ const f=fixture(t,{call:(id,method)=>page[method]?.()??true});
+ f.hub.setViewer('properties',true);await flush();
+ assert.deepEqual(f.hub.state().snapshot.detail.components[0].fields.map(field=>[field.name,field.value,field.editable]),[['string',mask,false],['_string',mask,false],['_inputFlag',0,false],['placeholder','[accessor: click to read]',false]]);
+ leak(f.published,'published snapshots');leak(await f.hub.query('inspect',['n1','s',{}]),'inspect');
+ assert.equal(await f.hub.action('print',['n1','c1','s']),true);leak(f.outputs,'print record');leak(formatPrint(f.outputs[0]),'console text');leak(f.hub.lastPrint(),'lastPrint');
+ assert.equal(await f.hub.read('n1','c1','string'),mask);
+ assert.deepEqual(maskPasswords(box(mask,0)),box(mask,0),'text the page already masked is not masked again');
+ const label={id:'c2',type:'cc.Label',fields:[{name:'string',value:'Hello'}]};assert.deepEqual(maskPasswords(label),label,'other components pass through');
+ component=box('jev-visible',5);await f.hub.refresh(true);
+ assert.equal(f.hub.state().snapshot.detail.components[0].fields[1].value,'jev-visible','a normal box is unchanged');assert.equal(await f.hub.read('n1','c1','string'),'jev-visible');
+});
+test('the fallback masking also recognises a project subclass of cc.EditBox by its fields',()=>{
+ const sub=(flag)=>({id:'c9',type:'game.SecretInput',script:'abc',enabled:true,enabledInHierarchy:true,fieldsLimited:false,fields:[{name:'_string',value:'hunter2',editable:false},{name:'_inputFlag',value:flag,editable:false},{name:'_textLabel',value:'[object]',editable:false}]});
+ assert.equal(JSON.stringify(maskPasswords({uuid:'n',components:[sub(0)]})).includes('hunter2'),false,'a password subclass is masked');
+ assert.equal(maskPasswords(sub(5)).fields[0].value,'hunter2','a plain subclass is unchanged');
+ const other={id:'c3',type:'game.Settings',fields:[{name:'_string',value:'x'},{name:'_inputFlag',value:0}]};assert.deepEqual(maskPasswords(other),other,'a component without a text label is not taken for an EditBox');
 });

@@ -104,7 +104,7 @@ Needs the project to inject a preview bridge script that implements the bridge i
 | `browser_debug_language` | write | `code?` | Without code: read the current language and the available list. |
 | `browser_debug_mock_set` | write | `transport=rpc\|http`, `name`, `method?`, `response?:object`, `fail?:boolean`, `status?:integer`, `err?`, `once?:boolean`, `delayMs?:integer` | Register a preview-only fake response for one unary RPC method (transport rpc, name = full method such as pkg.v1.Service/Method) or one HTTP request path (transport http, name = path; optional method). |
 | `browser_debug_mock_list` | read | — | List registered preview mocks with hit counts. |
-| `browser_debug_mock_clear` | write | `transport?=rpc\|http`, `name?` | Remove one mock (transport + name) or, without arguments, all mocks. |
+| `browser_debug_mock_clear` | write | `transport?=rpc\|http`, `name?` | Remove mocks: transport + name removes one, transport alone removes all mocks of that transport, no arguments removes all; name without transport is rejected. |
 | `browser_debug_stats` | read | — | Current-frame render statistics from the running game: fps, frame time, draw calls, instances, triangles and node count (what the engine profiler shows). |
 | `browser_debug_capture_bodies` | write | `enabled:boolean` | Opt in to keeping RPC/HTTP request and response bodies in the preview timeline (browser_debug_timeline), redacted for secret-looking keys and bounded to 4 KB each. |
 

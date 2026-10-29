@@ -15,7 +15,18 @@ test('dedicated guest rejects editor and wrong partition, restricts navigation a
  const original=guest.session;guest.session={};await assert.rejects(relay.bind(71),/dedicated preview page/);guest.session=original;
  await relay.bind(71);let blocked=false;guest.emit('will-navigate',{preventDefault(){blocked=true}},'https://other.test');assert.ok(blocked);assert.equal(guest.openHandler().action,'deny');
  assert.equal(allowedUrl('http://localhost:7456/?x=1',relay.options.url),true);assert.equal(allowedUrl('http://localhost:7456/other',relay.options.url),false);
- relay.release(12);assert.equal(relay.guest,guest);relay.release(71);assert.equal(guest.listenerCount('will-navigate'),0);assert.equal(guest.debugger.listenerCount('message'),0);assert.equal(guest.debugger.isAttached(),false);
+ relay.release(12);assert.equal(relay.guest,guest);relay.release(71);assert.equal(guest.listenerCount('will-navigate'),0);assert.equal(guest.debugger.listenerCount('message'),0);assert.equal(guest.debugger.listenerCount('detach'),0);assert.equal(guest.debugger.isAttached(),false);
+});
+test('a debugger detach releases the binding, so binding the same guest attaches again',async t=>{
+ const {guest,relay}=fixture(t);const attach=guest.debugger.attach;let attaches=0;guest.debugger.attach=(...args)=>{attaches++;return attach(...args);};
+ await relay.bind(71);guest.url=relay.options.url;assert.equal(relay.status().connected,true);
+ await relay.bind(71);assert.equal(attaches,1,'a live binding is kept');
+ const target=relay.status().targetId;guest.debugger.detach();guest.debugger.emit('detach',{},'canceled_by_user');
+ assert.equal(relay.guest,null);assert.equal(relay.status().present,false,'the panel sees the loss and binds again');
+ assert.equal(guest.debugger.listenerCount('message'),0);assert.equal(guest.debugger.listenerCount('detach'),0);assert.equal(guest.listenerCount('will-navigate'),0);assert.equal(guest.listenerCount('console-message'),0);
+ await relay.bind(71);assert.equal(attaches,2);assert.equal(relay.status().connected,true);assert.notEqual(relay.status().targetId,target,'a new target');assert.equal(guest.debugger.listenerCount('message'),1);
+ guest.debugger.detach();assert.equal(relay.status().connected,false,'detached without an event');
+ await relay.bind(71);assert.equal(attaches,3,'binding again attaches even without a detach event');assert.equal(relay.status().connected,true);assert.equal(guest.debugger.listenerCount('message'),1);assert.equal(guest.debugger.listenerCount('detach'),1);
 });
 test('page events reach in-process listeners only while the preview page is current; reloads bump the target',async t=>{
  const {guest,relay}=fixture(t);const seen=[];const stop=relay.onEvent((method,params)=>seen.push([method,params]));
@@ -51,7 +62,8 @@ test('destroyed guest releases without touching native getters or detaching, and
  debug.isAttached=()=>{if(destroyed)throw TypeError('Object has been destroyed');return true;};debug.detach=()=>{detaches++;};
  destroyed=true;
  assert.doesNotThrow(()=>guest.emit('destroyed'));assert.equal(relay.guest,null);
- assert.equal(debug.listenerCount('message'),0);assert.equal(guest.listenerCount('will-navigate'),0);assert.equal(detaches,0);
+ assert.equal(debug.listenerCount('message'),0);assert.equal(debug.listenerCount('detach'),0);assert.equal(guest.listenerCount('will-navigate'),0);assert.equal(detaches,0);
+ assert.doesNotThrow(()=>debug.emit('detach',{},'target closed'),'a late detach after destruction is ignored');
  assert.equal(relay.release(71),false);assert.equal(relay.status().connected,false);
  destroyed=false;await relay.bind(71);assert.equal(debug.listenerCount('message'),1);assert.equal(relay.release(71),true);assert.equal(detaches,1);
 });

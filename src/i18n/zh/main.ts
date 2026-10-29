@@ -20,6 +20,8 @@ register('zh', {
     'main.configInvalidJson': '{file} 不是合法的 JSON：{reason}',
     'main.configUnknownKey': '{file} 含未知配置项：{key}',
     'main.configFieldInvalid': '{file} 的 {key} 无效，应为 {expected}',
+    'main.previewCloseOnUnloadFailed': '[调试预览] 卸载时关闭调试预览失败：{error}',
+    'main.previewReopenFailed': '重载后未能重新打开调试预览：{error}',
     'main.settingsNotObject': '{file} 必须是 JSON 对象',
     'main.configLoadFailed': '[Git Desk] 读取 git-desk.config.json 失败，已改用默认配置：{error}',
     // main.ts

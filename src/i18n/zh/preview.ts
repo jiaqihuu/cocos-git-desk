@@ -1,6 +1,10 @@
 import { register } from '../registry';
 // Domain: preview. Chinese texts are the original strings, byte for byte.
 register('zh', {
+    'preview.actionLanguage': '切换语言',
+    'preview.actionMockSet': '设置假响应',
+    'preview.actionUiClose': '关闭界面',
+    'preview.actionUiOpen': '打开界面',
     'preview.argsNotObject': '工具参数必须是 JSON 对象',
     'preview.argMissing': '缺少参数：{key}',
     'preview.argUnknown': '未知参数：{key}',
@@ -11,6 +15,12 @@ register('zh', {
     'preview.argJsonArray': '参数应为 JSON 数组（最多 200 项、64 KB）：{key}',
     'preview.argStringArray': '参数应为字符串数组：{key}',
     'preview.argObject': '参数应为不超过 16 KB 的 JSON 对象：{key}',
+    'preview.environmentConfigInvalid': 'git-desk.config.json 无法使用（{error}），为避免按默认环境列表误操作，已拒绝{action}；修正文件后重新加载扩展',
+    'preview.environmentFieldMissing': '预览桥的 identity() 没有报告运行环境字段 {field}；更新项目预览桥，或在 git-desk.config.json 的 bridge.environmentField 写对字段名并重新加载扩展，然后刷新预览',
+    'preview.environmentNotReported': '游戏还没有报告运行环境，已拒绝{action}；等游戏加载完配置后重试',
+    'preview.environmentRefused': '预览运行环境是 {environment}，不在允许的测试环境（{allowed}）之列，已拒绝{action}；需要复现时切到测试环境，或调整 git-desk.config.json 的 bridge.testEnvironments 后重新加载扩展',
+    'preview.environmentUnreadable': '无法确认预览的运行环境（{error}），为避免误操作正式环境已拒绝{action}；确认调试预览已连接、游戏已启动后重试',
+    'preview.mockClearNeedsTransport': '按名字清除假响应需要同时给 transport（rpc 或 http）；只给 transport 清除该类全部，不给参数清除全部',
     'preview.preferenceInvalid': '本机调试偏好文件无效',
     'preview.bridgeControlMissing': '页面尚未加载项目预览桥（window.{name} 不存在）',
     'preview.bridgeMismatch': '预览桥版本或项目不匹配',

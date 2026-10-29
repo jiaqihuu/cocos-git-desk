@@ -30,6 +30,7 @@ Each tool's arguments are validated against the schema in `static/mcp-tools*.jso
 - `creator_message` sends `Editor.Message.request` only for a fixed allowlist of read-only messages: `asset-db` query/refresh/open messages, `scene` query messages, `preview` `query-preview-url`, `project` `query-config`, `engine` `query-info`/`query-engine-info`, `assets` `twinkle`. Everything else is rejected before it reaches the editor.
 - Runtime inspector scripts (`browser-debug/inspector-*.js|.cjs`) are bundled with the extension and injected only into the main frame of the embedded Debug Preview. The main process routes calls to a fixed method set; it does not provide a generic "evaluate in page" IPC.
 - Project bridge tools only call methods exposed by the bridge object the project itself injects. Mocks intercept only request methods the bridge wrapped; the bridge interface lets projects mark protected request names (for example login or gateway calls) that can never be mocked.
+- The bridge commands that change game state (`browser_debug_ui_open`, `ui_close`, `language` with `code`, `mock_set`) run only when the page reports an environment listed in `bridge.testEnvironments`. They are refused when the environment is missing or unreadable, and when `git-desk.config.json` cannot be used.
 - `creator_asset_write` writes whole text assets through asset-db, requires the target path to be inside a task scope, requires the current content hash when overwriting, and validates `.prefab`/`.scene` serialisation and `__uuid__` references before writing.
 
 ## Git writes: task scope and one-time plans
@@ -53,7 +54,8 @@ This is a collaboration gate between an AI client and the editor, not a security
 ## Privacy and redaction
 
 - Page event capture and evidence export pass through `src/preview-sanitize.ts`: `Bearer` tokens, JWT-shaped strings and values of keys named `authorization`, `cookie`, `set-cookie`, `access_token`, `refresh_token`, `id_token`, `api_key`, `password`, `secret`, `token` are replaced with `[redacted]`.
-- Request/response bodies are not captured unless `browser_debug_capture_bodies` is enabled; when enabled each body is redacted and truncated to 4 KB, and the setting resets on page reload.
+- Request/response bodies are not captured unless `browser_debug_capture_bodies` is enabled; when enabled each body is redacted and truncated to 4 KB, and the setting resets on page reload. Evidence packages never contain captured bodies; entries that had them are marked `bodiesOmitted`.
+- The runtime inspector shows a password `EditBox` and the label it renders into only as the text length, and it cannot change the box's input type.
 - Exports are written locally to `debug.outputDir` (default `~/.cocos-git-desk/<projectId>/exports`). Nothing is uploaded.
 - Remote URLs with embedded user info, passwords or query parameters are hidden in `remotes` results and cannot be edited through the API; use a credential helper.
 - The extension never stores Git passwords or tokens; it relies on your SSH agent and credential helpers.

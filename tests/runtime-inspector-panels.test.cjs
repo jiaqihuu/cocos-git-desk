@@ -5,6 +5,8 @@ let mounts=[];
 inspector.mountInspector=(root,options)=>{const mount={root,options,visible:[],disposed:0,setVisible(v){this.visible.push(v);},dispose(){this.disposed++;}};mounts.push(mount);return mount;};
 const hierarchy=require('../dist/runtime-hierarchy-panel'),properties=require('../dist/runtime-properties-panel'),window=require('../dist/runtime-inspector-window');
 test.after(()=>{inspector.mountInspector=Original;});
+// main.js runs with __dirname inside a temporary extension root (static linked in), so the debug preview reopen marker never touches the real .cache.
+function extensionDist(t){const root=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'gd-main-'));fs.mkdirSync(path.join(root,'dist'));fs.symlinkSync(path.resolve(__dirname,'../static'),path.join(root,'static'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return path.join(root,'dist');}
 test('docked hierarchy and properties panels mount their own viewer and forward show/hide',()=>{
  for(const [module,viewer,id] of [[hierarchy,'hierarchy','#runtime-hierarchy'],[properties,'properties','#runtime-properties']]){
   mounts=[];const root={};const instance={$:{root}};
@@ -33,9 +35,9 @@ test('package manifest declares the docked panels, the floating window and every
   const method=manifest.contributions.messages[message]?.methods?.[0];assert.ok(method,message);assert.equal(typeof main.methods[method],'function',method);
  }
 });
-test('showing the preview docks the runtime panels beside Creator\'s own without needing a preview; hiding closes them',async()=>{
+test('showing the preview docks the runtime panels beside Creator\'s own without needing a preview; hiding closes them',async t=>{
  const filename=path.resolve(__dirname,'../dist/main.js'),req=createRequire(filename),exports={},calls=[];const open=new Set(['hierarchy','inspector']);const logs=[];
- vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:path.dirname(filename),console:Object.assign(Object.create(console),{info:(...a)=>logs.push(['info',...a]),warn:(...a)=>logs.push(['warn',...a])}),process,setTimeout,clearTimeout,setInterval,clearInterval,require:Object.assign(n=>n==='./git'?{GitDesk:class{task(){return undefined;}}}:n==='./contexts'?{WorkspaceContexts:class{constructor(){this.worktrees={ready:Promise.resolve()};}running(){return false;}}}:n==='./mcp-bridge'?{startMcpBridge:async()=>undefined}:req(n),{cache:req.cache}),
+ vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:extensionDist(t),console:Object.assign(Object.create(console),{info:(...a)=>logs.push(['info',...a]),warn:(...a)=>logs.push(['warn',...a])}),process,setTimeout,clearTimeout,setInterval,clearInterval,require:Object.assign(n=>n==='./git'?{GitDesk:class{task(){return undefined;}}}:n==='./contexts'?{WorkspaceContexts:class{constructor(){this.worktrees={ready:Promise.resolve()};}running(){return false;}}}:n==='./mcp-bridge'?{startMcpBridge:async()=>undefined}:req(n),{cache:req.cache}),
   Editor:{Project:{path:'/fixture'},Panel:{has:async name=>open.has(name),open:async name=>{calls.push(['open',name]);return true;},focus:async name=>{calls.push(['focus',name]);return true;},close:async name=>{calls.push(['close',name]);open.delete(name);},openBeside:async(anchor,name)=>{calls.push(['beside',anchor,name]);open.add(name);return true;}},Message:{broadcast(){},request:async()=>undefined}}});
  exports.load();await new Promise(resolve=>setImmediate(resolve));
  try {
@@ -48,11 +50,11 @@ test('showing the preview docks the runtime panels beside Creator\'s own without
   reply=await exports.methods.runtimeInspectorAsset('../x','reveal');assert.equal(reply.ok,false);assert.deepEqual(logs.at(-1).slice(0,2),['warn','[调试预览] 该对象未保留可定位的源资源 UUID'],'failures reach the console status bar');
  } finally { await exports.unload(); }
 });
-test('runtime_inspector_status answers without a preview, collects panel reports and remembers failed replies; creator_extension_log reads the notices',async()=>{
+test('runtime_inspector_status answers without a preview, collects panel reports and remembers failed replies; creator_extension_log reads the notices',async t=>{
  const os=require('node:os');const filename=path.resolve(__dirname,'../dist/main.js'),req=createRequire(filename),exports={},broadcasts=[],logs=[];
  const project=fs.mkdtempSync(path.join(os.tmpdir(),'gd-status-'));fs.writeFileSync(path.join(project,'package.json'),JSON.stringify({uuid:'test-project-0002'}));
  let debugHandler;const open=new Set(['hierarchy','inspector','cocos-git-desk.debug-preview']);
- vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:path.dirname(filename),console:Object.assign(Object.create(console),{info:(...a)=>logs.push(['info',...a]),warn:(...a)=>logs.push(['warn',...a]),error:(...a)=>logs.push(['error',...a])}),process,Buffer,setTimeout,clearTimeout,setInterval,clearInterval,
+ vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:extensionDist(t),console:Object.assign(Object.create(console),{info:(...a)=>logs.push(['info',...a]),warn:(...a)=>logs.push(['warn',...a]),error:(...a)=>logs.push(['error',...a])}),process,Buffer,setTimeout,clearTimeout,setInterval,clearInterval,
   require:Object.assign(n=>n==='./git'?{GitDesk:class{task(){return undefined;}}}:n==='./contexts'?{WorkspaceContexts:class{constructor(){this.worktrees={ready:Promise.resolve()};}running(){return false;}}}:n==='./mcp-bridge'?{startMcpBridge:async(cache,projectPath,handle,debug)=>{debugHandler=debug;return {close:async()=>{}};}}:n==='electron'?{session:{fromPartition:()=>({})},webContents:{fromId:()=>null}}:req(n),{cache:req.cache}),
   Editor:{Project:{path:project},Panel:{has:async name=>open.has(name),open:async()=>true,focus:async()=>true,close:async name=>{open.delete(name);},openBeside:async(anchor,name)=>{open.add(name);return true;}},Message:{broadcast:(...args)=>broadcasts.push(args),request:async()=>undefined}}});
  exports.load();await new Promise(resolve=>setImmediate(resolve));

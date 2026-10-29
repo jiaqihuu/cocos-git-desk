@@ -17,7 +17,9 @@ export interface PreviewPage {
 // the bridge object names and api version, the fingerprint roots and the per-machine directories.
 export interface PreviewDebugSettings {
     projectId: string;
-    bridge: { controlName: string; debugName: string; apiVersion: string };
+    bridge: { controlName: string; debugName: string; apiVersion: string; environmentField?: string; testEnvironments?: readonly string[] };
+    // Set when git-desk.config.json could not be used; page commands are then refused instead of running on the defaults.
+    configError?: string | null;
     revisionRoots?: readonly string[];
     stateDir: string;
     outputDir: string;
@@ -211,10 +213,12 @@ export class PreviewDebugService {
         const recent = this.capture.eventsBuffer.slice(-1000);
         const browserEvents = recent.map(event => ({ id: event.id, time: event.time, category: event.category, level: event.level, ...(event.category === 'marker' ? { label: event.message } : {}),
             requestId: event.requestId, status: event.status, method: event.method, url: event.url, source: event.source, browserTimestamp: event.browserTimestamp, opcode: event.opcode, encodedPayloadLength: event.encodedPayloadLength }));
-        const timeline = [...(trace.data.entries as Array<{ time: number }>).map(event => ({ source: 'bridge', time: event.time, event })), ...browserEvents.map(event => ({ source: 'browser', time: Date.parse(event.time), event }))].sort((a, b) => a.time - b.time);
-        const report = { schemaVersion: 1, startedAt, finishedAt: new Date().toISOString(), identity, hierarchy: hierarchy.data, state: state.data, trace: trace.data, timeline,
+        // Opt-in request/response bodies stay in the live timeline; an evidence package is meant to be shared, so it never carries them.
+        const entries = ((trace.data.entries ?? []) as Array<{ time: number; bodies?: unknown }>).map(({ bodies, ...event }) => bodies === undefined ? event : { ...event, bodiesOmitted: true });
+        const timeline = [...entries.map(event => ({ source: 'bridge', time: event.time, event })), ...browserEvents.map(event => ({ source: 'browser', time: Date.parse(event.time), event }))].sort((a, b) => a.time - b.time);
+        const report = { schemaVersion: 1, startedAt, finishedAt: new Date().toISOString(), identity, hierarchy: hierarchy.data, state: state.data, trace: { ...trace.data, entries }, timeline,
             browserCapture: { ...this.capture.status(), exportedEvents: browserEvents.length, omittedEarlierEvents: Math.max(0, this.capture.eventsBuffer.length - recent.length) },
-            notes: ['Observation spans several queries; it is not an atomic game-state snapshot.', 'Browser console text and payloads are omitted. Screenshot pixels can still contain personal information.',
+            notes: ['Observation spans several queries; it is not an atomic game-state snapshot.', 'Browser console text, WebSocket payloads and captured request/response bodies are omitted. Screenshot pixels can still contain personal information.',
                 'HTTP/unary RPC completion is client-side evidence; stream messages and server-side acceptance are outside this bridge.', 'Stamp equality does not prove that all compiled modules or live prefab instances are current.'] };
         const directory = await this.evidenceDirectory();
         const files: Array<{ name: string; sha256: string }> = [];
@@ -226,6 +230,33 @@ export class PreviewDebugService {
             await save('manifest.json', JSON.stringify({ complete: true, sessionId, files }, null, 2) + '\n');
         } catch (error) { throw new MessageError('preview.evidenceWriteFailed', { directory, error: error instanceof Error ? error.message : String(error) }); }
         return { directory, sessionId, complete: true, files, screenshotIncluded: !!pixels };
+    }
+    // The running environment comes from the control object, which a bridge installs whether or not the observer is
+    // enabled. The field name is configurable (bridge.environmentField); a bridge that does not report it fails closed.
+    private async environment(): Promise<string | null> {
+        const field = this.settings.bridge.environmentField ?? 'environment';
+        const value = await this.page.evaluate(`(() => { ${this.guard()}
+            const control = window[${JSON.stringify(this.settings.bridge.controlName)}];
+            if (!control) throw Error(${JSON.stringify(t('preview.bridgeControlMissing', { name: this.settings.bridge.controlName }))});
+            const identity = control.identity();
+            if (${this.identityCheck()}) throw Error(${JSON.stringify(t('preview.bridgeMismatch'))});
+            if (!identity || !(${JSON.stringify(field)} in identity)) throw Error(${JSON.stringify(t('preview.environmentFieldMissing', { field }))});
+            return { environment: identity[${JSON.stringify(field)}] };
+        })()`, { awaitPromise: false }) as { environment?: unknown } | null | undefined;
+        if (!value || typeof value !== 'object') throw new MessageError('preview.bridgeInvalidResult');
+        return typeof value.environment === 'string' && value.environment ? value.environment : null;
+    }
+    // Page commands run only on an allowed test environment; everything else, an environment that cannot be read
+    // included, is refused before anything reaches the game.
+    private async requireTestEnvironment(action: string): Promise<string> {
+        if (this.settings.configError) throw new MessageError('preview.environmentConfigInvalid', { action, error: this.settings.configError });
+        const allowed = this.settings.bridge.testEnvironments ?? ['dev', 'test', 'staging'];
+        let environment: string | null;
+        try { environment = await this.environment(); }
+        catch (error) { throw new MessageError('preview.environmentUnreadable', { action, error: error instanceof Error ? error.message : String(error) }); }
+        if (environment === null) throw new MessageError('preview.environmentNotReported', { action });
+        if (!allowed.includes('*') && !allowed.includes(environment)) throw new MessageError('preview.environmentRefused', { action, environment, allowed: allowed.join(', ') });
+        return environment;
     }
     // Tool dispatch for the MCP bridge; names are the ones the former standalone server exposed.
     async call(name: string, input: unknown): Promise<unknown> {
@@ -249,14 +280,19 @@ export class PreviewDebugService {
             case 'browser_debug_wait_for_reload': return this.capture.waitForReload(args as unknown as { afterId: number; timeoutMs?: number });
             case 'browser_debug_compare': return this.capture.compare(args as unknown as { beforeStartId: number; beforeEndId: number; afterStartId: number; afterEndId?: number });
             case 'browser_debug_stop': { const message = await this.setEnabled(false); return { ...this.capture.stop(), preference: this.status(), message }; }
-            // Commands: they change the running preview, so each one is also written to the page timeline.
+            // Commands: they change the running preview, so each one is also written to the page timeline and runs only on a
+            // test environment the page reports (see requireTestEnvironment). Listing and clearing mocks stay allowed anywhere.
             case 'browser_debug_ui_list': return this.bridge('uiList');
-            case 'browser_debug_ui_open': return this.bridge('uiOpen', [args.name ?? args.uiid, ...(args.args === undefined ? [] : [args.args])]);
-            case 'browser_debug_ui_close': return this.bridge('uiClose', [args.name ?? args.uiid]);
-            case 'browser_debug_language': return this.bridge('language', args.code === undefined ? [] : [args.code]);
-            case 'browser_debug_mock_set': return this.bridge('mockSet', [args]);
+            case 'browser_debug_ui_open': await this.requireTestEnvironment(t('preview.actionUiOpen')); return this.bridge('uiOpen', [args.name ?? args.uiid, ...(args.args === undefined ? [] : [args.args])]);
+            case 'browser_debug_ui_close': await this.requireTestEnvironment(t('preview.actionUiClose')); return this.bridge('uiClose', [args.name ?? args.uiid]);
+            case 'browser_debug_language':
+                if (args.code === undefined) return this.bridge('language', []);
+                await this.requireTestEnvironment(t('preview.actionLanguage')); return this.bridge('language', [args.code]);
+            case 'browser_debug_mock_set': await this.requireTestEnvironment(t('preview.actionMockSet')); return this.bridge('mockSet', [args]);
             case 'browser_debug_mock_list': return this.bridge('mockList');
-            case 'browser_debug_mock_clear': return this.bridge('mockClear', args.name === undefined ? [] : [args.transport, args.name]);
+            case 'browser_debug_mock_clear':
+                if (args.transport === undefined && args.name !== undefined) throw new MessageError('preview.mockClearNeedsTransport');
+                return this.bridge('mockClear', args.transport === undefined ? [] : args.name === undefined ? [args.transport] : [args.transport, args.name]);
             case 'browser_debug_stats': return this.bridge('stats');
             case 'browser_debug_capture_bodies': return this.bridge('captureBodies', [args.enabled === true]);
             default: throw new MessageError('preview.unknownTool', { name });

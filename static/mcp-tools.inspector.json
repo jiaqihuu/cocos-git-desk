@@ -138,7 +138,7 @@
   },
   {
     "name": "runtime_inspector_inspect",
-    "description": "Read one live node: transform, prefab source, referenced assets, owning view and components with their fields (same data as the Runtime Properties panel). uuid and sessionId come from runtime_inspector_hierarchy; a reloaded page rejects stale sessions. componentId narrows to one component; all includes private fields.",
+    "description": "Read one live node: transform, prefab source, referenced assets, owning view and components with their fields (same data as the Runtime Properties panel). uuid and sessionId come from runtime_inspector_hierarchy; a reloaded page rejects stale sessions. componentId narrows to one component; all includes private fields. A password EditBox (and its text label) never returns its content, only the length; its inputFlag cannot be edited.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -206,7 +206,7 @@
   },
   {
     "name": "runtime_inspector_print",
-    "description": "Print a node or component to the Creator console as readable JSON and expose it as $gd0 in the preview DevTools; returns the same record.",
+    "description": "Print a node or component to the Creator console as readable JSON and expose it as $gd0 in the preview DevTools; returns the same record. A password EditBox (and its text label) never returns its content, only the length; its inputFlag cannot be edited.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -257,7 +257,7 @@
   },
   {
     "name": "browser_debug_export",
-    "description": "Save one local evidence package under the debug output directory (agent-settings.json debug.outputDir, default ~/.cocos-git-desk/<projectId>/exports) with identity, UI states, merged timeline, pending requests and optional screenshot (default true). Refuses mixed page sessions. Screenshots may contain personal data.",
+    "description": "Save one local evidence package under the debug output directory (agent-settings.json debug.outputDir, default ~/.cocos-git-desk/<projectId>/exports) with identity, UI states, merged timeline, pending requests and optional screenshot (default true). Refuses mixed page sessions. Screenshots may contain personal data. Captured request/response bodies, console text and WebSocket payloads are not included.",
     "inputSchema": {
       "type": "object",
       "properties": {

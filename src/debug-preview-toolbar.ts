@@ -1,4 +1,4 @@
-import { BrowserDebugFeedback } from './browser-debug-feedback';
+import { BrowserDebugFeedback, TransientNotice } from './browser-debug-feedback';
 import type { Reply } from './types';
 import { t } from './i18n';
 import { attr, html } from './panel-i18n';
@@ -21,13 +21,13 @@ interface Toolbar {
 export function ready(this:Toolbar):void {
     this.dispose?.();
     const {wrap,button,gitButton,result}=this.$;
-    const feedback=new BrowserDebugFeedback((message,pending)=>{
+    const notice=new TransientNotice(result);
+    const feedback=new BrowserDebugFeedback((message,pending,failed)=>{
         button.disabled=pending;
         gitButton.disabled=pending;
         gitButton.setAttribute('aria-busy',String(pending));
         button.setAttribute('aria-busy',String(pending));
-        result.textContent=message;
-        result.hidden=false;
+        notice.show(message,pending,failed);
     });
     const open=()=>void feedback.run(t('panel.toolbar.openingPreview'),async()=>{
         const reply=await Editor.Message.request<Reply<string>>('cocos-git-desk','debug-preview-open');
@@ -40,8 +40,8 @@ export function ready(this:Toolbar):void {
         return t('panel.toolbar.gitOpened');
     });
     const stopDoubleClick=(event:Event)=>event.stopPropagation();
-    const outside=(event:Event)=>{if(!event.composedPath().includes(wrap))result.hidden=true;};
-    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')result.hidden=true;};
+    const outside=(event:Event)=>{if(!event.composedPath().includes(wrap))notice.hide();};
+    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')notice.hide();};
     button.addEventListener('click',open);
     gitButton.addEventListener('click',openGit);
     wrap.addEventListener('dblclick',stopDoubleClick);
@@ -49,6 +49,7 @@ export function ready(this:Toolbar):void {
     wrap.ownerDocument.addEventListener('keydown',escape);
     this.dispose=()=>{
         feedback.dispose();
+        notice.dispose();
         button.removeEventListener('click',open);
         gitButton.removeEventListener('click',openGit);
         wrap.removeEventListener('dblclick',stopDoubleClick);

@@ -14,7 +14,7 @@ export const template = `<div id="preview"><header><div class="actions" role="gr
 <button id="devtools" type="button" aria-label="${attr('panel.preview.devtools')}" title="${attr('panel.preview.devtoolsTitle')}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg></button>
 <span class="sep" aria-hidden="true"></span><button id="zoom-out" type="button" aria-label="${attr('panel.preview.zoomOut')}" title="${attr('panel.preview.zoomOutTitle')}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M8 11h6"/></svg></button><button id="zoom-in" type="button" aria-label="${attr('panel.preview.zoomIn')}" title="${attr('panel.preview.zoomInTitle')}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M8 11h6m-3-3v6"/></svg></button><button id="zoom-fit" type="button" aria-pressed="false" aria-label="${attr('panel.preview.fit')}" title="${attr('panel.preview.fitTitle')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></button><span class="sep" aria-hidden="true"></span>
 ${pickTemplate}${linkTemplate}${inspectorActionsTemplate}<span class="sep" aria-hidden="true"></span>
-<button id="detach-inspector" type="button" aria-pressed="false" title="${attr('panel.preview.detachTitle')}" aria-label="${attr('panel.preview.detach')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7m0-7L10 14"/><path d="M19 14v6H5V6h6"/></svg></button>
+<button id="detach-inspector" type="button" aria-pressed="false" title="${attr('panel.preview.detachTitle')}" aria-label="${attr('panel.preview.detach')}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="14" height="12" rx="1.5"/><path d="M3 11.5h14M7 8V5.5A1.5 1.5 0 0 1 8.5 4h11A1.5 1.5 0 0 1 21 5.5v9a1.5 1.5 0 0 1-1.5 1.5H17"/></svg></button>
 <button id="audio" type="button" aria-label="${attr('panel.preview.mute')}" aria-pressed="false" title="${attr('panel.preview.soundOn')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4 6 8H3v8h3l5 4Z"/><path class="sound-on" d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path class="sound-off" d="m16 9 6 6m0-6-6 6"/></svg></button>
 <button id="codex" type="button" aria-label="${attr('panel.preview.configureClient')}" title="${attr('panel.preview.configureClient')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 20"/></svg></button>
 </div><div class="messages"><span id="status" role="status" aria-live="polite">${html('panel.preview.connecting')}…</span><span id="connection" role="status"></span><span class="inspector-message" role="status"></span></div><span id="game-version" title="${attr('panel.preview.gameVersion')}"></span></header>${clientConfigTemplate}${renderTemplate}<div id="preview-body"><div id="host"></div></div></div>`;
@@ -44,13 +44,13 @@ export async function ready(this:Instance):Promise<void> {
     const tooltips=new PanelTooltips(root);
     this.dockSize=new PreviewDockSize(root);
     this.dockSize.show();
-    let closed=false, id:number|undefined, bound=false, muted=false, audioPreferenceKey='', zoomKey='', zoom=1, fit=false, fitting=false;
+    let closed=false, id:number|undefined, bound=false, binding:Promise<void>|undefined, started=false, loading=false, gone=false, lost=0, muted=false, audioPreferenceKey='', zoomKey='', zoom=1, fit=true, fitting=false;
     const audio=root.querySelector<HTMLButtonElement>('#audio')!;
     const updateAudioButton=()=>{audio.setAttribute('aria-pressed',String(muted));setTooltipTitle(audio,muted?t('panel.preview.soundOff'):t('panel.preview.soundOn'));};
     const feedback=new BrowserDebugFeedback((message,pending)=>{if(closed)return;status.textContent=message;for(const b of root.querySelectorAll<HTMLButtonElement>('.actions button'))b.disabled=pending;});
     const guest=root.ownerDocument.createElement('webview') as Guest;
     const host=root.querySelector<HTMLElement>('#host')!,fitButton=root.querySelector<HTMLButtonElement>('#zoom-fit')!;
-    const saveZoom=()=>{try{root.ownerDocument.defaultView?.localStorage.setItem(zoomKey,JSON.stringify({zoom,fit}));}catch{}};
+    const saveZoom=()=>{try{root.ownerDocument.defaultView?.localStorage.setItem(zoomKey,JSON.stringify({zoom}));}catch{}};
     const applyZoom=(factor:number,persist=true)=>{
         zoom=Math.round(Math.max(zoomRange[0],Math.min(zoomRange[1],factor))*100)/100;
         if(bound)try{guest.setZoomFactor(zoom);}catch(error){status.textContent=t('panel.preview.zoomFailed',{error:String(error)});}
@@ -59,12 +59,12 @@ export async function ready(this:Instance):Promise<void> {
     };
     const refit=async()=>{
         if(closed||!fit||!bound||fitting)return;fitting=true;
-        try { const metrics=await request<PageMetrics|null>('debug-preview-metrics');const rect=host.getBoundingClientRect();if(closed||!fit||!metrics)return;const factor=fitZoom({width:rect.width,height:rect.height},metrics);if(Math.abs(factor-zoom)>=0.01)applyZoom(factor,false); }
+        try { const metrics=await request<PageMetrics|null>('debug-preview-metrics');const rect=host.getBoundingClientRect();if(closed||!fit||!metrics)return;const factor=fitZoom({width:rect.width,height:rect.height},metrics);if(Math.abs(factor-zoom)>=0.01)applyZoom(factor); }
         catch(error){ if(!closed)status.textContent=t('panel.preview.metricsFailed',{error:String(error)}); }
         finally{ fitting=false; }
     };
     const showZoom=()=>{for(const id of ['#zoom-in','#zoom-out'])root.querySelector<HTMLElement>(id)!.hidden=fit;};
-    const setFit=(value:boolean)=>{fit=value;fitButton.setAttribute('aria-pressed',String(fit));showZoom();saveZoom();if(fit)void refit();};
+    const setFit=(value:boolean)=>{fit=value;fitButton.setAttribute('aria-pressed',String(fit));showZoom();if(fit)void refit();};
     root.querySelector('#zoom-in')!.addEventListener('click',()=>{if(fit)setFit(false);applyZoom(zoom*1.25);});
     root.querySelector('#zoom-out')!.addEventListener('click',()=>{if(fit)setFit(false);applyZoom(zoom/1.25);});
     fitButton.addEventListener('click',()=>setFit(!fit));
@@ -96,18 +96,31 @@ export async function ready(this:Instance):Promise<void> {
     root.querySelector('#client-config-close')!.addEventListener('click',()=>{clientConfig.hidden=true;});
     const listeners:Array<[string,EventListener]>=[];
     const listen=(name:string,fn:EventListener)=>{guest.addEventListener(name,fn);listeners.push([name,fn]);};
+    const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
+    // Binding never waits behind the shared action feedback, so a pending export or client setup cannot leave the
+    // guest unbound. Callers share the bind in flight; bound turns true only once the main process accepted it.
+    const bind=()=>binding??=(async()=>{id=guest.getWebContentsId();await request('debug-preview-bind',id);if(!closed)bound=true;})().finally(()=>{binding=undefined;});
+    // An extension reload or a detached debugger leaves this tab bound to nothing. Binding the same guest again is
+    // enough: the main process accepts the live page and re-applies the debug preference, so the game keeps its state.
+    const healText=t('panel.preview.reconnecting');
+    const heal=()=>{bound=false;status.textContent=healText;void bind().then(()=>{if(!closed&&status.textContent===healText)status.textContent='';},error=>{if(!closed)status.textContent=t('panel.preview.reconnectFailed',{error:errorText(error)});});};
     let polling=false;
     const poll=setInterval(async()=>{
         if(closed||!bound||polling||!visible)return;polling=true;
         try {
-            const state=await request<{floating:boolean;connected:boolean;recording:{enabled:boolean;applied:boolean;lastError?:string|null;waiting?:string|null;noBridge?:boolean;gameVersion?:string}|null}>('debug-preview-status');
+            const state=await request<{floating:boolean;present?:boolean;connected:boolean;recording:{enabled:boolean;applied:boolean;lastError?:string|null;waiting?:string|null;noBridge?:boolean;gameVersion?:string;mocks?:number}|null}>('debug-preview-status');
             if(closed)return;
             root.querySelector('#detach-inspector')!.setAttribute('aria-pressed',String(state.floating));
             if(fit&&state.connected)void refit();
             root.querySelector('#game-version')!.textContent=state.connected ? state.recording?.gameVersion || '' : '';
-            const connection=root.querySelector<HTMLElement>('#connection')!, waiting=state.connected&&!!state.recording?.waiting, noBridge=state.connected&&state.recording?.noBridge===true;
-            connection.classList.toggle('waiting',waiting||noBridge);
-            connection.textContent=!state.connected?t('panel.preview.disconnected'):!state.recording?'':waiting?t('panel.preview.waitingGame'):noBridge?t('panel.preview.noBridge'):state.recording.lastError || (state.recording.enabled?'':t('panel.preview.recordingOff'));
+            const connection=root.querySelector<HTMLElement>('#connection')!, recording=state.connected?state.recording:null, waiting=!!recording?.waiting, noBridge=recording?.noBridge===true;
+            // Active fake responses change what the game receives: shown after any other state, in the warning colour.
+            const mocks=Number(recording?.mocks)>0?t('panel.preview.mocksActive',{count:Number(recording!.mocks)}):'';
+            connection.classList.toggle('waiting',(waiting||noBridge)&&!mocks);
+            connection.textContent=[!state.connected?t('panel.preview.disconnected'):!recording?'':waiting?t('panel.preview.waitingGame'):noBridge?t('panel.preview.noBridge'):recording.lastError || (recording.enabled?'':t('panel.preview.recordingOff')),mocks].filter(Boolean).join(t('panel.preview.messageSeparator'));
+            // One rebind per loss: it needs two polls where the main process holds no guest, with no bind or page load in
+            // flight, and a connected poll re-arms it. A held guest on another URL keeps its binding; a crashed one cannot bind.
+            if(state.connected)lost=0;else if(!state.present&&!gone&&!binding&&!loading&&++lost===2)heal();
         } catch(error){if(!closed)root.querySelector('#connection')!.textContent=t('panel.preview.statusFailed',{error:String(error)});}
         finally{polling=false;}
     },2000);
@@ -118,7 +131,9 @@ export async function ready(this:Instance):Promise<void> {
         if(closed)return;
         audioPreferenceKey='gitdesk-preview-muted:'+config.partition;zoomKey='gitdesk-preview-zoom:'+config.partition;
         try { muted=root.ownerDocument.defaultView?.localStorage.getItem(audioPreferenceKey)==='true'; } catch {}
-        try { const saved=JSON.parse(root.ownerDocument.defaultView?.localStorage.getItem(zoomKey)||'{}'); if(Number.isFinite(saved.zoom))zoom=Math.max(zoomRange[0],Math.min(zoomRange[1],saved.zoom)); fit=saved.fit===true; } catch {}
+        // The preview always opens fitted to the panel; manual zoom lasts until the panel closes. The last factor is
+        // only the starting point until the page reports its size, so reopening does not flash at 100%.
+        try { const saved=JSON.parse(root.ownerDocument.defaultView?.localStorage.getItem(zoomKey)||'{}'); if(Number.isFinite(saved.zoom))zoom=Math.max(zoomRange[0],Math.min(zoomRange[1],saved.zoom)); } catch {}
         fitButton.setAttribute('aria-pressed',String(fit));showZoom();applyZoom(zoom,false);
         updateAudioButton();
         const url=new URL(config.url);url.searchParams.set('gitDeskEmbedded','1');
@@ -129,22 +144,25 @@ export async function ready(this:Instance):Promise<void> {
         guest.setAttribute('webpreferences','contextIsolation=yes,nodeIntegration=no,sandbox=yes');
         listen('dom-ready',()=>{
             if(closed)return;
+            clearTimeout(startup);gone=false;
             try { guest.setAudioMuted(muted); } catch(error) { status.textContent=t('panel.preview.audioFailed',{error:String(error)}); }
             try { guest.setZoomFactor(zoom); } catch(error) { status.textContent=t('panel.preview.zoomFailed',{error:String(error)}); }
-            if(bound)return;
-            bound=true;clearTimeout(startup);id=guest.getWebContentsId();
-            void feedback.run(t('panel.preview.connecting'),async()=>{
-                try { await request('debug-preview-bind',id); } catch (error) { bound=false; throw error; }
-                if(closed)return t('panel.preview.closed');
-                await guest.loadURL(config.url);
-                return '';
-            });
+            if(bound||binding)return;
+            status.textContent=t('panel.preview.connecting')+'…';
+            // Only the first bind navigates; a later one (after a failed reconnect) keeps the page that just loaded.
+            // Load failures are reported by did-fail-load.
+            void bind().then(()=>{if(closed)return;status.textContent='';if(!started){started=true;guest.loadURL(config.url).catch(()=>{});}},
+                error=>{if(!closed)status.textContent=t('panel.preview.connectFailed',{error:errorText(error)});});
         });
         listen('did-finish-load',()=>{if(!closed&&fit)void refit();});
-        listen('did-start-loading',()=>{if(!closed)root.querySelector('#game-version')!.textContent='';});
+        listen('did-start-loading',()=>{loading=true;if(!closed)root.querySelector('#game-version')!.textContent='';});
+        listen('did-stop-loading',()=>{loading=false;});
         listen('did-fail-load',event=>{const failure=event as Event & {errorCode:number;errorDescription:string;isMainFrame:boolean};if(!closed&&failure.isMainFrame&&failure.errorCode!==-3)status.textContent=t('panel.preview.loadFailed',{error:failure.errorDescription});});
-        listen('render-process-gone',()=>{if(!closed)status.textContent=t('panel.preview.processGone');});
-        root.querySelector('#reload')!.addEventListener('click',()=>{status.textContent=t('panel.preview.reloading');void feedback.run(t('panel.preview.reload'),async()=>{if(!bound){id=guest.getWebContentsId();await request('debug-preview-bind',id);bound=true;}if(closed)return t('panel.preview.closed');await guest.loadURL(config.url);return '';});});
+        listen('render-process-gone',()=>{gone=true;if(!closed)status.textContent=t('panel.preview.processGone');});
+        root.querySelector('#reload')!.addEventListener('click',()=>{status.textContent=t('panel.preview.reloading');void feedback.run(t('panel.preview.reload'),async()=>{
+            // The local flag lags a detach by up to two polls; ask the main process so the reload is always captured.
+            if(bound){const state=await request<{present?:boolean}>('debug-preview-status');if(!state.present)bound=false;}
+            if(!bound)await bind();if(closed)return t('panel.preview.closed');started=true;await guest.loadURL(config.url);return '';});});
         root.querySelector('#devtools')!.addEventListener('click',()=>void feedback.run(t('panel.preview.openingDevtools'),async()=>{if(!bound)throw Error(t('panel.preview.notBound'));guest.openDevTools();return t('panel.preview.devtoolsRequested');}));
         audio.addEventListener('click',()=>void feedback.run(t('panel.preview.togglingAudio'),async()=>{
             if(closed)return '';

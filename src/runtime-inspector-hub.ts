@@ -22,6 +22,30 @@ export const reportRequestBroadcast='cocos-git-desk:runtime-inspector-report-req
 const loadingCodes=new Set(['ENGINE_NOT_LOADED','FRAME_REMOVED','PREVIEW_NOT_CONNECTED']);
 export function loadingFailure(error:unknown):boolean { return !!error&&typeof error==='object'&&loadingCodes.has(String((error as {code?:unknown}).code)); }
 export function reason(error:unknown):string { return error&&typeof error==='object'&&typeof (error as {message?:unknown}).message==='string'?(error as {message:string}).message:String(error); }
+// The page inspector masks a password EditBox's string/_string to this marker. A page keeps an inspector injected by an
+// older build until the preview reloads, so EditBox data is masked again before panels, AI tools and the console get it.
+const passwordMask=(text:unknown):string=>`[password hidden, length ${String(text??'').length}]`;
+const maskedText=/^\[password hidden, length \d+\]$/;
+// 0 is cc.EditBox.InputFlag.PASSWORD in Creator 3.8, the engine line the page inspector runs on.
+// Recognised by its fields as well as its type, so project subclasses of cc.EditBox are masked too.
+function passwordBox(item:unknown):item is RuntimeComponent {
+    const component=item as RuntimeComponent|null|undefined;
+    if(!component||typeof component.type!=='string'||!Array.isArray(component.fields))return false;
+    const names=new Set(component.fields.map(field=>field.name));
+    const editBox=component.type==='cc.EditBox'||(names.has('_textLabel')||names.has('textLabel'))&&(names.has('_string')||names.has('string'));
+    return editBox&&component.fields.some(field=>(field.name==='_inputFlag'||field.name==='inputFlag')&&field.value===0);
+}
+const plainText=(key:string,value:unknown):value is string=>(key==='string'||key==='_string')&&typeof value==='string'&&!maskedText.test(value);
+// Accepts a component, a node detail, an inspect result or a print record.
+export function maskPasswords<T>(data:T):T {
+    if(!data||typeof data!=='object')return data;
+    if(passwordBox(data))return {...data,fields:data.fields.map(field=>!field.getter&&plainText(field.name,field.value)?{...field,value:passwordMask(field.value),editable:false}:field)};
+    const item=data as Record<string,unknown>,copy:Record<string,unknown>={...item};
+    if(Array.isArray(item.components))copy.components=item.components.map(component=>maskPasswords(component));
+    if(item.component)copy.component=maskPasswords(item.component);
+    if(item.data)copy.data=maskPasswords(item.data);
+    return copy as T;
+}
 // Creator's console only shows text, so a print becomes a labelled, indented JSON block there.
 export function formatPrint(record:unknown):string {
     const data=record&&typeof record==='object'?record as Record<string,unknown>:{};
@@ -109,7 +133,7 @@ export class RuntimeInspectorHub {
             const result=await this.transport.call(this.frame,method,method==='print'?[...args,{snapshot:true}]:args);
             if(epoch!==this.epoch||this.closed)return false;
             if(method==='capture'){this.capturePending=true;this.capture={pending:true,error:'',result:null};this.renderTimer=-Infinity;this.ensureTimer();}
-            if(method==='print'){this.printed=result;this.output(result);}
+            if(method==='print'){this.printed=maskPasswords(result);this.output(this.printed);}
             if(method==='select'){this.reveal=true;this.options.contains='';this.options.components=[];}
             await this.refresh(true);return true;
         } catch(error){ if(epoch===this.epoch&&!this.closed){this.actionError=reason(error);await this.refresh(true);this.emit();} return false; }
@@ -117,8 +141,9 @@ export class RuntimeInspectorHub {
     async read(uuid:string,id:string,key:string):Promise<unknown> {
         if(this.closed)throw Error(t('inspector.previewClosed'));
         if(!this.frame||!this.snapshot)throw Error(t('inspector.selectNodeFirst'));
+        const detail=this.snapshot.detail,component=detail?.uuid===uuid?detail.components.find(item=>item.id===id):undefined;
         const value=await this.transport.call(this.frame,'read',[uuid,id,key,this.snapshot.sessionId]);
-        this.digest='';await this.refresh(true);return value;
+        this.digest='';await this.refresh(true);return passwordBox(component)&&plainText(key,value)?passwordMask(value):value;
     }
     // Read-only page queries for AI tools; they never touch selection, polling or the overlay.
     async query(method:Query,args:unknown[]):Promise<unknown> {
@@ -126,7 +151,8 @@ export class RuntimeInspectorHub {
         if(method!=='hierarchy'&&method!=='inspect'&&method!=='layout')throw Error(t('inspector.unsupportedQuery'));
         await this.loadFrames();
         if(!this.frame)throw Error(t('inspector.pageNotLoaded'));
-        return this.transport.call(this.frame,method,args);
+        const result=await this.transport.call(this.frame,method,args);
+        return method==='inspect'?maskPasswords(result):result;
     }
     private async loadFrames():Promise<void> {
         if(this.frame&&Date.now()-this.lastFrames<5000)return;
@@ -153,6 +179,7 @@ export class RuntimeInspectorHub {
             if(!state.unchanged){
                 if(this.snapshot&&this.snapshot.sessionId!==state.sessionId)this.reset();
                 if(state.revealHover)this.options.contains='';
+                if(state.detail)state.detail=maskPasswords(state.detail);
                 this.snapshot=state;this.options.offset=state.offset;this.reveal=false;this.digest=state.digest||'';this.activeAt=Date.now();
                 // Canvas picks bring the runtime tabs forward only while click linking is on.
                 if(typeof state.picks==='number'){ if(this.picks!==undefined&&state.picks>this.picks&&this.options.link)this.picked?.(); this.picks=state.picks; }

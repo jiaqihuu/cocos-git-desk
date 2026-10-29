@@ -27,7 +27,8 @@ class EmbeddedPreview {
         if (!guest || guest.isDestroyed() || guest.getType() !== 'webview' || guest.session !== this.electron.session.fromPartition(this.partition)
             || !guest.hostWebContents || !guest.hostWebContents.getURL().startsWith('file://')
             || !(guest.getURL() === 'about:blank' || allowedUrl(guest.getURL(),this.options.url))) throw Error('Not the dedicated preview page of this project');
-        if (this.guest === guest) return;
+        // The same guest is kept only while its debugger is still attached; otherwise it is released and attached again.
+        if (this.guest === guest && this.guestDebugger.isAttached()) return;
         this.release(); this.inspector = new InspectorFrames(guest, { engineVersions: this.engineVersions }); this.guest = guest; this.guestId = guest.id; this.guestDebugger = guest.debugger; this.generation++;
         this.onMessage = (_event, method, params) => {
             if (this.guest !== guest || guest.isDestroyed() || !allowedUrl(guest.getURL(),this.options.url)) return;
@@ -45,12 +46,14 @@ class EmbeddedPreview {
             (this.logger[method] || this.logger.log)('[Git Desk] '+text+source);
         };
         this.onDestroyed = () => this.release();
+        // A detach (DevTools, a crash) drops the binding, so status() reports the loss and the panel binds again.
+        this.onDetach = () => { if (this.guest === guest) this.release(); };
         guest.setWindowOpenHandler(() => ({action:'deny'}));
         guest.on('will-navigate',this.onNavigate); guest.on('will-redirect',this.onNavigate);
         guest.on('console-message',this.onConsole);
         guest.once('destroyed',this.onDestroyed);
         try {
-            guest.debugger.attach('1.3'); guest.debugger.on('message',this.onMessage);
+            guest.debugger.attach('1.3'); guest.debugger.on('message',this.onMessage); guest.debugger.on('detach',this.onDetach);
             for (const method of ['Runtime.enable','Log.enable','Network.enable','Page.enable']) {
                 if (this.guest !== guest) throw Error('The preview panel was closed');
                 await guest.debugger.sendCommand(method);
@@ -106,7 +109,7 @@ class EmbeddedPreview {
         guest.removeListener('will-navigate',this.onNavigate); guest.removeListener('will-redirect',this.onNavigate); guest.removeListener('destroyed',this.onDestroyed);
         guest.removeListener('console-message',this.onConsole);
         // The WebContents debugger getter throws after the destroyed event.
-        debuggerSession.removeListener('message',this.onMessage);
+        debuggerSession.removeListener('message',this.onMessage); debuggerSession.removeListener('detach',this.onDetach);
         if (!guest.isDestroyed() && debuggerSession.isAttached()) debuggerSession.detach();
         return true;
     }

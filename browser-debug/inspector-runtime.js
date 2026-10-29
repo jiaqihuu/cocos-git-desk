@@ -50,6 +50,18 @@
         return '[object: not expanded]';
     }
     const sensitive = key => /password|token|authorization|cookie|secret|email|account|phone/i.test(key);
+    // A password EditBox's text never leaves the page: string/_string of the box and of the Label it renders
+    // into report only the length. Field names alone cannot tell, so the box's flag decides.
+    const masked = text => '[password hidden, length '+String(text??'').length+']';
+    const passwordBox = edit => !!edit && !!cc.EditBox?.InputFlag && edit instanceof cc.EditBox && edit.inputFlag===cc.EditBox.InputFlag.PASSWORD;
+    function secret(component,key,node=component?.node) {
+        if(key!=='string' && key!=='_string' || !cc.EditBox || !component)return false;
+        if(component instanceof cc.EditBox)return passwordBox(component);
+        for(let p=node,depth=0;p && depth<16;p=p.parent,depth++)if((p.components||[]).some(edit=>passwordBox(edit) && edit.textLabel===component))return true;
+        return false;
+    }
+    // Turning a password box into a plain one would let the next read return the plaintext.
+    const flagLocked = (component,key) => /^_?inputFlag$/.test(key) && passwordBox(component);
     function descriptor(object, key) {
         for (let p=object, depth=0;p && depth<12;p=Object.getPrototypeOf(p),depth++) {
             const value=Object.getOwnPropertyDescriptor(p,key);if(value)return value;
@@ -65,11 +77,12 @@
         return ['boolean','string'].includes(typeof value) || typeof value==='number' && Number.isFinite(value)
             || value instanceof Vec2 || value instanceof Vec3 || cc.Color && value instanceof cc.Color;
     }
-    function fieldInfo(component,key) {
+    function fieldInfo(component,key,node) {
         const d=descriptor(component,key);if(!d || typeof d.value==='function')return null;
-        const attrs=(cc.CCClass || cc.Class)?.Attr?.attr(component.constructor,key) || {};
-        if(!Object.hasOwn(d,'value')){const cached=reads.get(component)?.get(key);return cached?{name:key,accessor:true,editable:!!d.set && editable(cached.raw) && attrs.readonly!==true,value:cached.value,enumList:attrs.enumList}:{name:key,getter:true,editable:false,value:'[accessor: click to read]',enumList:attrs.enumList};}
-        return {name:key,value:valueInfo(d.value),editable:!key.startsWith('_') && !!d.writable && editable(d.value) && attrs.readonly!==true,enumList:attrs.enumList};
+        const attrs=(cc.CCClass || cc.Class)?.Attr?.attr(component.constructor,key) || {},hidden=secret(component,key,node),locked=hidden || flagLocked(component,key);
+        // A read cached before the box became a password box is masked too.
+        if(!Object.hasOwn(d,'value')){const cached=reads.get(component)?.get(key);return cached?{name:key,accessor:true,editable:!locked && !!d.set && editable(cached.raw) && attrs.readonly!==true,value:hidden?masked(cached.raw):cached.value,enumList:attrs.enumList}:{name:key,getter:true,editable:false,value:'[accessor: click to read]',enumList:attrs.enumList};}
+        return {name:key,value:hidden?masked(d.value):valueInfo(d.value),editable:!locked && !key.startsWith('_') && !!d.writable && editable(d.value) && attrs.readonly!==true,enumList:attrs.enumList};
     }
     // Direct asset references of a node's components, read from plain data fields only (no accessors).
     function assetsOf(components) {
@@ -100,7 +113,7 @@
             const names=expanded && !expanded.has(componentId(component)) ? [] : fieldsOf(component,all);
             return { id:componentId(component), type:js.getClassName(component), script:js.getClassId(component,false)||'',
                 enabled:component.enabled,enabledInHierarchy:component.enabledInHierarchy,
-                fields:names.map(key=>fieldInfo(component,key)).filter(Boolean),fieldsLimited:names.length>=(all?200:80) };
+                fields:names.map(key=>fieldInfo(component,key,node)).filter(Boolean),fieldsLimited:names.length>=(all?200:80) };
         });
         const prefab=source(node.prefab?.asset);
         return {...info(node),position:valueInfo(node.position),scale:valueInfo(node.scale),rotation:valueInfo(node.eulerAngles),
@@ -140,7 +153,10 @@
     }
     function edit(request,session) {
         check(session);valueBudget=2000;const {uuid,id='',field,value,expected}=request;
-        const object=target(uuid,id),before=valueInfo(readField(object,field,id));
+        // The conflict check and undo would need the plaintext, so masked text is not editable here.
+        const object=target(uuid,id);if(secret(object,field,lookup(uuid)))throw Error('A password box does not reveal its content and cannot be edited in the inspector');
+        if(flagLocked(object,field))throw Error('The input type of a password box cannot be changed in the inspector');
+        const before=valueInfo(readField(object,field,id));
         if(JSON.stringify(before)!==JSON.stringify(expected))throw Error('The property changed; refresh and retry');
         assign(object,field,value,id);
         const after=valueInfo(readField(object,field,id));if(reads.has(object))reads.get(object).delete(field);history.push({uuid,id,field,before,after});if(history.length>50)history.shift();return true;
@@ -265,8 +281,10 @@
         pick(value,session) {check(session);start();picking=value===true;if(!picking){pageHovered='';hovered='';}draw();return picking;},
         hover(uuid,session){check(session);pageHovered='';hovered=uuid?target(uuid).uuid:'';draw();return true;},
         edit,
-        undo(session){check(session);valueBudget=2000;const last=history[history.length-1];if(!last)throw Error('Nothing to undo');const object=target(last.uuid,last.id);if(JSON.stringify(valueInfo(readField(object,last.field,last.id)))!==JSON.stringify(last.after))throw Error('The game changed the property; it cannot be undone');assign(object,last.field,last.before,last.id);history.pop();return true;},
-        read(uuid,id,key,session){check(session);valueBudget=2000;const object=target(uuid,id),raw=readField(object,key,id),value=valueInfo(raw);if(!reads.has(object))reads.set(object,new Map());reads.get(object).set(key,{raw,value});return value;},
+        undo(session){check(session);valueBudget=2000;const last=history[history.length-1];if(!last)throw Error('Nothing to undo');const object=target(last.uuid,last.id);
+            // An undo must not do what edit refuses: write a password box's text or turn it back into a plain box.
+            if(secret(object,last.field,lookup(last.uuid)))throw Error('A password box does not reveal its content and cannot be edited in the inspector');if(flagLocked(object,last.field))throw Error('The input type of a password box cannot be changed in the inspector');if(JSON.stringify(valueInfo(readField(object,last.field,last.id)))!==JSON.stringify(last.after))throw Error('The game changed the property; it cannot be undone');assign(object,last.field,last.before,last.id);history.pop();return true;},
+        read(uuid,id,key,session){check(session);valueBudget=2000;const object=target(uuid,id),raw=readField(object,key,id),value=secret(object,key,lookup(uuid))?masked(raw):valueInfo(raw);if(!reads.has(object))reads.set(object,new Map());reads.get(object).set(key,{raw,value});return value;},
         print(uuid,id,session,options){
             check(session);const object=target(uuid,id),node=target(uuid);window.$gd0=object;
             // Creator's console receives this line as plain text; the object itself stays reachable as $gd0.
@@ -305,7 +323,7 @@
                 const row={uuid:node.uuid,name:safeText(node.name),path:path(node),depth,kind:kindOf(node),
                     x:round(rect.x),y:round(height-rect.y-rect.height),width:round(rect.width),height:round(rect.height),
                     anchor:{x:transform.anchorX,y:transform.anchorY},scale:{x:node.scale?.x??1,y:node.scale?.y??1},layer:node.layer,opacity:opacity?opacity.opacity:null};
-                if(label){row.fontSize=label.fontSize;if(options.includeText===true)row.text=safeText(String(label.string??''));}
+                if(label){row.fontSize=label.fontSize;if(options.includeText===true)row.text=secret(label,'string',node)?masked(label.string):safeText(String(label.string??''));}
                 if(sprite)row.sprite=sprite.spriteFrame?safeText(String(sprite.spriteFrame.name||'')):'';
                 if(color)row.color=hex(color);
                 rows.push(row);
