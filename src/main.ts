@@ -10,6 +10,7 @@ import { checkEditorState, EditorPreparationRequiredError, prepareEditorForGit }
 import { ReflogQuery, ReflogPage } from './types';
 import { RemoteQuery, RemotePage } from './types';
 import path from 'path';
+import os from 'os';
 import type { Task, RemoteCheckResult } from './types';
 import { WorkspaceContexts } from './contexts';
 import { t, MessageError } from './i18n';
@@ -42,11 +43,22 @@ function previewUrl(): Promise<string | null> {
     if (!creatorPreviewUrl) {
         let request: Promise<unknown>;
         try { request = Promise.resolve(Editor.Message.request<unknown>('preview', 'query-preview-url')); } catch (error) { request = Promise.reject(error); }
-        creatorPreviewUrl = request.then(value => typeof value === 'string' && /^https?:\/\//i.test(value) ? value : null,
+        creatorPreviewUrl = request.then(value => typeof value === 'string' && /^https?:\/\//i.test(value) ? localPreview(value) : null,
             error => { extensionLog.issue('preview-url', reason(error)); return null; });
     }
     const pending = creatorPreviewUrl;
     return pending.then(url => { if (creatorPreviewUrl === pending) { resolvedPreviewUrl = url; if (!url) creatorPreviewUrl = undefined; } return url; });
+}
+// Creator reports its preview on a LAN address (for phones). Inside the editor the page is loaded through localhost when
+// that address is this machine, keeping it a secure context (crypto.randomUUID, getGamepads, clipboard) as in Creator's
+// own browser preview; the port, which differs per Creator instance, is kept.
+function localPreview(value: string): string {
+    try {
+        const url = new URL(value), local = new Set(['localhost', '127.0.0.1', '::1']);
+        for (const list of Object.values(os.networkInterfaces())) for (const item of list ?? []) local.add(item.address);
+        if (url.hostname !== 'localhost' && local.has(url.hostname.replace(/^\[|\]$/g, ''))) url.hostname = 'localhost';
+        return url.toString();
+    } catch { return value; }
 }
 const sameUrl = (a: string, b: string): boolean => { try { const x = new URL(a), y = new URL(b); return x.origin === y.origin && x.pathname === y.pathname; } catch { return a === b; } };
 function tools(): ToolSchema[] { return catalogue ||= toolCatalogue(projectConfig()); }
@@ -160,7 +172,8 @@ function creatorTools():CreatorTools {
     return creator;
 }
 // The editor window is Creator's main BrowserWindow; a panel is located by its dock frame in the DOM
-// and captured in content pixels (DOM bounds are CSS pixels, so the zoom factor is applied).
+// and captured in content pixels (DOM bounds are CSS pixels, so the zoom factor is applied). A panel that is not
+// docked lives in its own floating window, so every visible editor window is searched, the main one first.
 async function captureEditor(options:{panel?:string}):Promise<CaptureResult> {
     interface Win { id:number; isDestroyed():boolean; isVisible():boolean; getSize():[number,number]; getTitle():string; webContents:{ getZoomFactor():number; executeJavaScript(code:string):Promise<unknown>; capturePage(rect?:{x:number;y:number;width:number;height:number}):Promise<{ toPNG():Buffer; getSize():{width:number;height:number} }> }; }
     const {BrowserWindow}=require('electron') as { BrowserWindow:{ getAllWindows():Win[] } };
@@ -168,7 +181,7 @@ async function captureEditor(options:{panel?:string}):Promise<CaptureResult> {
     const area=(window:Win)=>{ const [w,h]=window.getSize(); return w*h; };
     const main=windows.find(window=>/cocos creator/i.test(window.getTitle()))??windows.sort((a,b)=>area(b)-area(a))[0];
     if(!main)throw new MessageError('main.noWindowToCapture');
-    const scale=main.webContents.getZoomFactor();
+    let target=main,scale=main.webContents.getZoomFactor();
     let rect:{x:number;y:number;width:number;height:number}|undefined;
     if(options.panel){
         // Every panel-frame in the window (through shadow roots) with its box, whether it is laid out, and
@@ -178,18 +191,25 @@ async function captureEditor(options:{panel?:string}):Promise<CaptureResult> {
             'let shown=false;if(visible){try{const hit=node.getRootNode().elementFromPoint(r.left+r.width/2,r.top+r.height/2);shown=!!hit&&(hit===node||node.contains(hit));}catch(e){shown=true;}}'+
             'found.push({name:node.getAttribute("name")||node.getAttribute("panel")||"",x:r.left,y:r.top,width:r.width,height:r.height,visible,shown});}'+
             'if(node.shadowRoot)walk(node.shadowRoot);}};walk(document);return found;})()';
-        const frames=await main.webContents.executeJavaScript(script) as Array<{name:string;x:number;y:number;width:number;height:number;visible:boolean;shown:boolean}>;
-        const matches=frames.filter(frame=>frame.name===options.panel);
-        const found=matches.find(frame=>frame.shown)??matches.find(frame=>frame.visible);
+        type Frame={name:string;x:number;y:number;width:number;height:number;visible:boolean;shown:boolean};
+        let frames:Frame[]=[],matches:Frame[]=[],found:Frame|undefined;
+        for(const window of [main,...windows.filter(item=>item!==main)]){
+            let list:Frame[];
+            try { list=await window.webContents.executeJavaScript(script) as Frame[]; } catch { continue; }
+            frames=frames.concat(list);
+            const here=list.filter(frame=>frame.name===options.panel),hit=here.find(frame=>frame.shown)??here.find(frame=>frame.visible);
+            matches=matches.concat(here);
+            if(hit){found=hit;target=window;scale=window.webContents.getZoomFactor();break;}
+        }
         if(!found){
             const others=[...new Set(frames.filter(frame=>frame.name).map(frame=>frame.name+(frame.shown?'':t('main.panelHiddenSuffix'))))].slice(0,30).join(t('main.listSeparator'));
             throw Error((matches.length?t('main.panelNotShown',{panel:options.panel}):t('main.panelNotFound',{panel:options.panel}))+t('main.panelsAvailable',{panels:others||t('main.none')}));
         }
         rect={x:Math.round(found.x*scale),y:Math.round(found.y*scale),width:Math.round(found.width*scale),height:Math.round(found.height*scale)};
     }
-    const image=await main.webContents.capturePage(rect);
+    const image=await target.webContents.capturePage(rect);
     const size=image.getSize();
-    return {png:image.toPNG(),title:main.getTitle(),bounds:rect??{x:0,y:0,width:size.width,height:size.height},scale};
+    return {png:image.toPNG(),title:target.getTitle(),bounds:rect??{x:0,y:0,width:size.width,height:size.height},scale};
 }
 // Results also go to the console: Creator's bottom status bar shows the latest console line, and the
 // notification area is used when the Task API is available.

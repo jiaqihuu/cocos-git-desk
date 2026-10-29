@@ -52,10 +52,31 @@ export class SceneTools {
     }
     private async write(args: Record<string, unknown>, message: string, payload: Record<string, unknown>, summary: Record<string, unknown>): Promise<unknown> {
         const scene = await this.guard(args.taskId);
-        // Creator groups edits into undo steps at snapshots; one per tool call keeps Ctrl+Z meaningful.
-        try { await this.host.request('scene', 'snapshot'); } catch { /* snapshots are best effort */ }
-        const result = await this.host.request<unknown>('scene', message, payload);
+        // Removing a node changes its parent, so the parent is the node recorded for undo.
+        const target = message === 'remove-node' ? await this.parentOf(payload.uuid) : payload.uuid;
+        const result = await this.recorded(target, () => this.host.request<unknown>('scene', message, payload));
         return { ...summary, result: result ?? null, scene: scene.url, dirty: await this.dirty(), note: t('creator.tools.unsavedInMemory') };
+    }
+    private async snapshot(): Promise<void> { try { await this.host.request('scene', 'snapshot'); } catch { /* snapshots are best effort */ } }
+    // Creator 3.8.8 records an undo step, and marks the scene dirty, between begin-recording(node) and
+    // end-recording(undoID); an edit made without it changes the scene in memory while the scene stays clean, so
+    // creator_scene_save would find nothing to save. Builds without the recording messages fall back to a snapshot.
+    private async recorded<T>(node: unknown, edit: () => Promise<T>): Promise<T> {
+        let undo: unknown;
+        if (typeof node === 'string' && node) { try { undo = await this.host.request<unknown>('scene', 'begin-recording', node); } catch { undo = undefined; } }
+        let result: T;
+        try { result = await edit(); }
+        catch (error) {
+            if (undo !== undefined && undo !== null) { try { await this.host.request('scene', 'cancel-recording', undo); } catch { /* nothing was recorded */ } }
+            throw error;
+        }
+        if (undo !== undefined && undo !== null) { try { await this.host.request('scene', 'end-recording', undo); } catch { await this.snapshot(); } }
+        else await this.snapshot();
+        return result;
+    }
+    private async parentOf(uuid: unknown): Promise<unknown> {
+        try { const dump = await this.host.request<{ parent?: { value?: { uuid?: unknown } } } | null>('scene', 'query-node', uuid); return dump?.parent?.value?.uuid ?? uuid; }
+        catch { return uuid; }
     }
     private async dirty(): Promise<boolean | null> { try { const value = await this.host.request<unknown>('scene', 'query-dirty'); return typeof value === 'boolean' ? value : null; } catch { return null; } }
     private async tree(args: Record<string, unknown>): Promise<unknown> {
@@ -108,9 +129,8 @@ export class SceneTools {
     }
     private async createNode(args: Record<string, unknown>): Promise<unknown> {
         const scene = await this.guard(args.taskId);
-        try { await this.host.request('scene', 'snapshot'); } catch { /* best effort */ }
         const payload: Record<string, unknown> = { parent: args.parent, name: args.name };
-        const uuid = await this.host.request<unknown>('scene', 'create-node', payload);
+        const uuid = await this.recorded(args.parent, () => this.host.request<unknown>('scene', 'create-node', payload));
         return { created: Array.isArray(uuid) ? uuid[0] : uuid, parent: args.parent, name: args.name, scene: scene.url, dirty: await this.dirty(), note: t('creator.tools.unsavedInMemory') };
     }
     private async instantiate(args: Record<string, unknown>): Promise<unknown> {
@@ -120,10 +140,9 @@ export class SceneTools {
         const uuid = assetUuid(id);
         const info = await this.host.request<{ url?: string } | null>('asset-db', 'query-asset-info', uuid, ['uuid', 'url']);
         if (!info || typeof info.url !== 'string' || !/\.prefab$/i.test(info.url)) throw new MessageError('creator.tools.notPrefab', { prefab: String(args.prefab) });
-        try { await this.host.request('scene', 'snapshot'); } catch { /* best effort */ }
         const payload: Record<string, unknown> = { parent: args.parent, assetUuid: uuid };
         if (typeof args.name === 'string') payload.name = args.name;
-        const created = await this.host.request<unknown>('scene', 'create-node', payload);
+        const created = await this.recorded(args.parent, () => this.host.request<unknown>('scene', 'create-node', payload));
         return { created: Array.isArray(created) ? created[0] : created, prefab: info.url, parent: args.parent, scene: scene.url, dirty: await this.dirty(), note: t('creator.tools.unsavedInMemory') };
     }
     private async save(args: Record<string, unknown>): Promise<unknown> {

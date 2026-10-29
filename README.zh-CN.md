@@ -4,6 +4,10 @@
 
 Cocos Creator 3.8 扩展：在编辑器内管理项目主仓库和递归子模块的 Git，并把同一个 Git 服务、编辑器能力和运行中的预览通过带任务范围、令牌门禁的 MCP 开放给 AI 客户端。不执行任意代码：所有写操作都先生成计划、审阅后用一次性令牌执行。
 
+![Git Desk 面板：工作区改动与 main.scene 的逐行暂存差异](store/screenshot-2-git-desk.png)
+
+![运行时检查器：运行中游戏的节点树与组件属性，停靠在 Creator 原生面板旁](store/screenshot-1-runtime-inspector.png)
+
 ## 与 funplay-cocos-mcp 的区别
 
 | | funplay-cocos-mcp | cocos-git-desk |

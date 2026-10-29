@@ -8,7 +8,7 @@ Fields of the Cocos developer center form (Store → New resource). The resource
 | Category | Creator Extension → Plugins |
 | Supported Creator versions | 3.8.x (tested on 3.8.8) |
 | Price | 0 (free, MIT) |
-| Package | `releases/cocos-git-desk-0.2.0.zip` built by `npm run package`, under 100 MB |
+| Package | `releases/cocos-git-desk-0.2.1.zip` built by `npm run package`, under 100 MB |
 | Source | https://github.com/jiaqihuu/cocos-git-desk |
 | Keywords | git, mcp, ai, claude code, codex, prefab diff, meta check, runtime inspector, submodule, lfs |
 

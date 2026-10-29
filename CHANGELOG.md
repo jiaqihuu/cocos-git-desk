@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-29
+
+### Fixed
+- The runtime inspector works on a preview opened through a LAN address. Such a page is not a secure context and has no `crypto.randomUUID`; the inspector frame script now falls back to `crypto.getRandomValues` for its session id.
+- The embedded preview opens Creator's preview server as `localhost` when the configured or reported host is an address of this machine, so the page is a secure context and browser APIs that need one keep working. Other hosts are kept as they are.
+- A project without a preview bridge no longer shows a permanent orange error in the preview toolbar. The toolbar shows a grey "No project preview bridge; the runtime inspector still works" note, and `status()` reports it as `noBridge`.
+- Scene editing tools (`creator_property_set`, `creator_component_add`, `creator_component_remove`, `creator_node_create`, `creator_node_remove`, `creator_prefab_instantiate`) now wrap each edit in Creator 3.8.8's `begin-recording` / `end-recording`. Before, the edit changed the scene in memory but Creator did not mark it dirty, so `creator_scene_save` reported nothing to save and the change was never written. Builds without the recording messages fall back to a snapshot after the edit; a failed edit cancels its recording. Found in a smoke test in a real Creator 3.8.8 editor.
+
+### Known issues
+- `creator_screenshot` with a `panel` does not find a panel that sits in a floating Creator window. Dock the panel into the main window before capturing it.
+
 ## [0.2.0] — 2026-10-29
 
 First public release of the extension that was previously developed inside a private Cocos Creator project as 0.1.x.
@@ -114,5 +125,6 @@ Last version developed inside the private project; summarised from the Chinese c
 ### Added
 - First standalone package: recursive repository discovery, working tree and index diffs with image comparison, LFS object reads, file staging with related `.meta` expansion, commit/push/fetch, fast-forward update, branch creation and switching, submodule sync, previewed writes with two-minute expiry, Agent IPC protocol v1 (`details(repo, {kind: 'agent', protocol: 1, ...})`).
 
-[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.1.8...HEAD
-[0.1.8]: https://github.com/jiaqihuu/cocos-git-desk/releases/tag/v0.1.8
+[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/jiaqihuu/cocos-git-desk/releases/tag/v0.2.0

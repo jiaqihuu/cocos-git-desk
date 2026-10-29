@@ -111,7 +111,9 @@ export class PreviewDebugService {
     }
     status(): Record<string, unknown> {
         const page = this.page.status(), waiting = this.startupWait(this.lastError);
-        return { enabled: this.desired === true, applied: this.applied === page.targetId && page.connected, lastError: waiting ? null : this.lastError, waiting: waiting ? this.lastError : null };
+        // Past the grace period a page without the bridge is a project that does not install one: a state, not an error.
+        const noBridge = !waiting && this.lastError !== null && this.lastError === t('preview.bridgeControlMissing', { name: this.settings.bridge.controlName });
+        return { enabled: this.desired === true, applied: this.applied === page.targetId && page.connected, lastError: waiting || noBridge ? null : this.lastError, waiting: waiting ? this.lastError : null, noBridge };
     }
     // While the page connects and the game boots, "not applied yet" is expected for a few seconds and is reported
     // as waiting, not as an error. Matched against the localized texts of the message ids, so it works in every

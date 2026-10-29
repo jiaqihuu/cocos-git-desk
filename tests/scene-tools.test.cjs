@@ -6,7 +6,7 @@ const tools=require('../dist/config').toolCatalogue();
 const sceneId='44444444-4444-4444-4444-444444444444',prefabId='11111111-1111-1111-1111-111111111111',root='aaaa',child='bbbb';
 function dump(value,type,extra={}){return {value,type,...extra};}
 function fixture(over={}){
- const calls=[];let dirty=over.dirty??false,current=over.current??sceneId;
+ const calls=[];let dirty=over.dirty??false,pending=false,current=over.current??sceneId;
  const byUuid={[sceneId]:{uuid:sceneId,url:'db://assets/main.scene'},[prefabId]:{uuid:prefabId,url:'db://assets/hall/HallView.prefab'},'55555555-5555-5555-5555-555555555555':{uuid:'55555555-5555-5555-5555-555555555555',url:'db://assets/a.png'}};
  const tree={uuid:root,name:'Canvas',active:true,type:'cc.Node',children:[{uuid:child,name:'Label',active:false,type:'cc.Node',prefab:{uuid:'p'},children:[{uuid:'cccc',name:'Deep',children:[]}]},{uuid:'dddd',name:'Bg',prefab:{state:0,assetUuid:''},children:[]}]};
  const node={name:dump('Label','String'),active:dump(false,'Boolean'),position:dump({x:1,y:2,z:0},'cc.Vec3'),parent:dump({uuid:root},'cc.Node'),children:[],
@@ -17,9 +17,14 @@ function fixture(over={}){
    if(channel==='scene'&&message==='query-dirty')return dirty;
    if(channel==='scene'&&message==='query-node-tree')return args[0]?tree.children[0]:tree;
    if(channel==='scene'&&message==='query-node')return args[0]===child?node:null;
-   if(channel==='scene'&&message==='snapshot')return true;
-   if(channel==='scene'&&message==='create-node'){dirty=true;return over.createArray?['new-1']:'new-1';}
-   if(channel==='scene'&&['remove-node','create-component','remove-component','set-property'].includes(message)){dirty=true;return message==='set-property'?true:undefined;}
+   // Like Creator 3.8.8: an edit only changes the scene in memory; end-recording records the undo step and marks it dirty.
+   // A build without the recording messages (over.noRecording) marks it dirty at the snapshot after the edit.
+   if(channel==='scene'&&message==='begin-recording'){if(over.noRecording)throw Error('unknown message');return 'undo-'+args[0];}
+   if(channel==='scene'&&message==='end-recording'){if(pending)dirty=true;pending=false;return true;}
+   if(channel==='scene'&&message==='cancel-recording'){pending=false;return true;}
+   if(channel==='scene'&&message==='snapshot'){if(pending)dirty=true;pending=false;return true;}
+   if(channel==='scene'&&message==='create-node'){pending=true;return over.createArray?['new-1']:'new-1';}
+   if(channel==='scene'&&['remove-node','create-component','remove-component','set-property'].includes(message)){pending=true;return message==='set-property'?true:undefined;}
    if(channel==='scene'&&message==='save-scene'){if(!over.cancelSave)dirty=false;return true;}
    if(channel==='scene'&&message==='open-scene'){if(!over.refuseOpen)current=args[0];return true;}
    if(channel==='asset-db'&&message==='query-asset-info')return byUuid[args[0]]||null;
@@ -50,14 +55,14 @@ test('node inspect unwraps dumps, trims long values and exposes component proper
  assert.equal(comp.properties.string.length,501);assert.deepEqual(comp.properties.font,{uuid:'55555555-5555-5555-5555-555555555555'});assert.equal(comp.properties.nested.deep.deeper.deepest,'[对象]');
  await assert.rejects(f.tools.call('creator_node_inspect',{uuid:'nope'}),/节点不存在/);
 });
-test('writes need a task that contains the open scene, take a snapshot first and never save by themselves',async()=>{
+test('writes need a task that contains the open scene, record the edit for undo and never save by themselves',async()=>{
  const f=fixture();
  await assert.rejects(f.tools.call('creator_node_create',{parent:root,name:'X'}),/taskId/);
  await assert.rejects(f.tools.call('creator_node_create',{parent:root,name:'X',taskId:'task-9'}),/任务不存在/);
  await assert.rejects(f.tools.call('creator_node_create',{parent:root,name:'X',taskId:'task-2'}),/不在任务范围内/);
  const created=await f.tools.call('creator_node_create',{parent:root,name:'X',taskId:'task-1'});
  assert.equal(created.created,'new-1');assert.equal(created.dirty,true);assert.match(created.note,/creator_scene_save/);
- const order=f.calls.filter(c=>c[0]==='scene').map(c=>c[1]);assert.deepEqual(order.slice(-3),['snapshot','create-node','query-dirty']);assert.deepEqual(f.calls.find(c=>c[1]==='create-node')[2],{parent:root,name:'X'});
+ const order=f.calls.filter(c=>c[0]==='scene').map(c=>c[1]);assert.deepEqual(order.slice(-4),['begin-recording','create-node','end-recording','query-dirty'],'the recording around the edit is what marks the scene dirty in Creator');assert.equal(f.calls.find(c=>c[1]==='begin-recording')[2],root,'creating a node records its parent');assert.deepEqual(f.calls.find(c=>c[1]==='create-node')[2],{parent:root,name:'X'});
  assert.ok(!f.calls.some(c=>c[1]==='save-scene'));
  const set=await f.tools.call('creator_property_set',{uuid:child,path:'__comps__.0.string',value:'hi',type:'String',taskId:'task-1'});
  assert.deepEqual(f.calls.find(c=>c[1]==='set-property')[2],{uuid:child,path:'__comps__.0.string',dump:{value:'hi',type:'String'}});assert.equal(set.result,true);
@@ -76,7 +81,9 @@ test('prefab instantiation resolves the prefab by url or uuid and refuses other 
  await assert.rejects(f.tools.call('creator_prefab_instantiate',{parent:root,prefab:'db://assets/missing.prefab',taskId:'task-1'}),/找不到 Prefab/);
 });
 test('save reports clean scenes, cancelled saves and the meta reminder',async()=>{
- const clean=fixture();assert.equal((await clean.tools.call('creator_scene_save',{taskId:'task-1'})).saved,false);assert.ok(!clean.calls.some(c=>c[1]==='save-scene'));
+ const clean=fixture();assert.equal((await clean.tools.call('creator_scene_save',{taskId:'task-1'})).saved,false);
+ const edited=fixture();await edited.tools.call('creator_component_add',{uuid:child,component:'cc.Sprite',taskId:'task-1'});const saved=await edited.tools.call('creator_scene_save',{taskId:'task-1'});
+ assert.equal(saved.saved,true,'an edit made through the tools is saved: the snapshot after it marked the scene dirty');assert.ok(edited.calls.some(c=>c[1]==='save-scene'));assert.ok(!clean.calls.some(c=>c[1]==='save-scene'));
  const f=fixture({dirty:true});const out=await f.tools.call('creator_scene_save',{taskId:'task-1'});assert.equal(out.saved,true);assert.match(out.note,/\.meta/);
  const cancelled=fixture({dirty:true,cancelSave:true});await assert.rejects(cancelled.tools.call('creator_scene_save',{taskId:'task-1'}),/未完成保存/);
  await assert.rejects(fixture({dirty:true}).tools.call('creator_scene_save',{taskId:'task-2'}),/不在任务范围内/);
@@ -88,4 +95,8 @@ test('open switches to scenes or prefabs and reports when Creator kept the curre
  await assert.rejects(f.tools.call('creator_scene_open',{url:'db://assets/none.scene'}),/找不到资源/);
  const kept=fixture({refuseOpen:true});const stay=await kept.tools.call('creator_scene_open',{uuid:prefabId});assert.equal(stay.opened,false);assert.equal(stay.current,sceneId);assert.match(stay.note,/未保存/);
  const busy=fixture({running:true});await assert.rejects(busy.tools.call('creator_scene_open',{uuid:prefabId}),/Git 操作正在执行/);
+});
+test('without the recording messages an edit falls back to a snapshot after it, and a failed edit cancels its recording',async()=>{
+ const old=fixture({noRecording:true});await old.tools.call('creator_component_add',{uuid:child,component:'cc.Sprite',taskId:'task-1'});
+ const order=old.calls.filter(c=>c[0]==='scene').map(c=>c[1]);assert.ok(order.indexOf('snapshot')>order.indexOf('create-component'),'snapshot after the edit');assert.equal((await old.tools.call('creator_scene_save',{taskId:'task-1'})).saved,true);
 });

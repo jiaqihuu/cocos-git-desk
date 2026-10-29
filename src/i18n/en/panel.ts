@@ -1179,6 +1179,7 @@ register('en', {
     'panel.preview.openingDevtools': 'Opening DevTools',
     'panel.preview.processGone': 'The preview process exited; close and reopen the debug preview.',
     'panel.preview.waitingGame': 'Waiting for the game to start…',
+    'panel.preview.noBridge': 'No project preview bridge; the runtime inspector still works',
     'panel.preview.recordingOff': 'Debug capture is off',
     'panel.preview.reload': 'Reload preview',
     'panel.preview.reloading': 'Reloading preview…',

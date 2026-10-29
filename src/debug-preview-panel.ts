@@ -100,14 +100,14 @@ export async function ready(this:Instance):Promise<void> {
     const poll=setInterval(async()=>{
         if(closed||!bound||polling||!visible)return;polling=true;
         try {
-            const state=await request<{floating:boolean;connected:boolean;recording:{enabled:boolean;applied:boolean;lastError?:string|null;waiting?:string|null;gameVersion?:string}|null}>('debug-preview-status');
+            const state=await request<{floating:boolean;connected:boolean;recording:{enabled:boolean;applied:boolean;lastError?:string|null;waiting?:string|null;noBridge?:boolean;gameVersion?:string}|null}>('debug-preview-status');
             if(closed)return;
             root.querySelector('#detach-inspector')!.setAttribute('aria-pressed',String(state.floating));
             if(fit&&state.connected)void refit();
             root.querySelector('#game-version')!.textContent=state.connected ? state.recording?.gameVersion || '' : '';
-            const connection=root.querySelector<HTMLElement>('#connection')!, waiting=state.connected&&!!state.recording?.waiting;
-            connection.classList.toggle('waiting',waiting);
-            connection.textContent=!state.connected?t('panel.preview.disconnected'):!state.recording?'':waiting?t('panel.preview.waitingGame'):state.recording.lastError || (state.recording.enabled?'':t('panel.preview.recordingOff'));
+            const connection=root.querySelector<HTMLElement>('#connection')!, waiting=state.connected&&!!state.recording?.waiting, noBridge=state.connected&&state.recording?.noBridge===true;
+            connection.classList.toggle('waiting',waiting||noBridge);
+            connection.textContent=!state.connected?t('panel.preview.disconnected'):!state.recording?'':waiting?t('panel.preview.waitingGame'):noBridge?t('panel.preview.noBridge'):state.recording.lastError || (state.recording.enabled?'':t('panel.preview.recordingOff'));
         } catch(error){if(!closed)root.querySelector('#connection')!.textContent=t('panel.preview.statusFailed',{error:String(error)});}
         finally{polling=false;}
     },2000);

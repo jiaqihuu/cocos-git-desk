@@ -17,7 +17,7 @@ const asked=requests=>requests.filter(item=>item==='preview/query-preview-url').
 test('with preview.url unset the embedded preview follows the URL Creator serves its preview on',async t=>{
  const {exports,requests}=load(t,{previewUrl:'http://localhost:7457'});
  const reply=await exports.methods.debugPreviewConfig();
- assert.equal(reply.ok,true,reply.error);assert.equal(reply.data.url,'http://localhost:7457','a second Creator instance does not serve on 7456');
+ assert.equal(reply.ok,true,reply.error);assert.equal(reply.data.url,'http://localhost:7457/','a second Creator instance does not serve on 7456');
  await exports.methods.debugPreviewConfig();assert.equal(asked(requests),1,'a good answer is kept for the session');
 });
 test('a configured preview.url wins and Creator is not asked',async t=>{
@@ -29,4 +29,12 @@ test('without an answer from Creator the default 7456 is used and Creator is ask
  const {exports,requests}=load(t,{urlError:'preview not ready'});
  assert.equal((await exports.methods.debugPreviewConfig()).data.url,'http://localhost:7456/');
  await exports.methods.debugPreviewConfig();assert.ok(asked(requests)>=2,'a failed answer is not cached');
+});
+test('a LAN address of this machine is loaded through localhost so the page stays a secure context; the port is kept',async t=>{
+ const {exports}=load(t,{previewUrl:'http://127.0.0.1:7458'});
+ assert.equal((await exports.methods.debugPreviewConfig()).data.url,'http://localhost:7458/');
+});
+test('an address that is not this machine is kept as Creator reports it',async t=>{
+ const {exports}=load(t,{previewUrl:'http://203.0.113.5:7456'});
+ assert.equal((await exports.methods.debugPreviewConfig()).data.url,'http://203.0.113.5:7456/');
 });

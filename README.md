@@ -4,6 +4,10 @@
 
 A Cocos Creator 3.8 extension that puts Git for the project and its submodules inside the editor, and exposes the same Git service, the editor and the running preview to AI clients through a scoped, token-gated MCP. No arbitrary code execution: every write goes through a reviewed one-time plan.
 
+![Git Desk panel: working tree changes and a line-staging diff of main.scene](store/screenshot-2-git-desk.png)
+
+![Runtime inspector: live node tree and component fields of the running game, docked next to Creator's panels](store/screenshot-1-runtime-inspector.png)
+
 ## How it differs from funplay-cocos-mcp
 
 | | funplay-cocos-mcp | cocos-git-desk |

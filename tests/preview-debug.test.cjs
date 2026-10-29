@@ -36,8 +36,8 @@ test('tool arguments are validated against the catalog before anything runs',()=
 });
 test('preference is saved per machine, pushed to the page, re-applied after reload and adopted from a newer page choice',async t=>{
  const f=fixture(t);
- assert.deepEqual(f.service.status(),{enabled:false,applied:false,lastError:null,waiting:null});
- const message=await f.service.setEnabled(true);assert.match(message,/已开启/);assert.deepEqual(f.service.status(),{enabled:true,applied:true,lastError:null,waiting:null});
+ assert.deepEqual(f.service.status(),{enabled:false,applied:false,lastError:null,waiting:null,noBridge:false});
+ const message=await f.service.setEnabled(true);assert.match(message,/已开启/);assert.deepEqual(f.service.status(),{enabled:true,applied:true,lastError:null,waiting:null,noBridge:false});
  const file=fs.readdirSync(f.settings.stateDir)[0];assert.match(file,/^observer-[0-9a-f]{64}\.json$/);const saved=JSON.parse(fs.readFileSync(path.join(f.settings.stateDir,file),'utf8'));assert.equal(saved.enabled,true);if(posixModes)assert.equal((fs.statSync(path.join(f.settings.stateDir,file)).mode&0o777),0o600);
  assert.ok(f.evaluations.at(-1).includes('control.setEnabled(true,'));
  const count=f.evaluations.length;await f.service.reconcile();assert.equal(f.evaluations.length,count,'applied pages are not re-injected');
@@ -88,7 +88,7 @@ test('command tools reach the page bridge with their arguments, await asynchrono
 test('bridge calls are refused while the preview is disconnected or the page bridge is missing',async t=>{
  const f=fixture(t,{connected:false});
  await assert.rejects(f.service.call('browser_debug_state',{}),/未连接/);
- assert.deepEqual(await f.service.call('browser_debug_connect',{}),{present:true,connected:false,targetId:null,generation:1,...require('../dist/preview-capture').PreviewCapture.prototype.status.call(f.service.capture),preference:{enabled:false,applied:false,lastError:null,waiting:null}});
+ assert.deepEqual(await f.service.call('browser_debug_connect',{}),{present:true,connected:false,targetId:null,generation:1,...require('../dist/preview-capture').PreviewCapture.prototype.status.call(f.service.capture),preference:{enabled:false,applied:false,lastError:null,waiting:null,noBridge:false}});
  const g=fixture(t);g.page.evaluate=async()=>null;await assert.rejects(g.service.call('browser_debug_state',{}),/无效结果/);
 });
 test('bridge object names, api version and project id come from the settings and are inlined into the page checks',async t=>{
@@ -106,7 +106,7 @@ test('startup waits are reported as waiting by message id, and a missing bridge 
  for(const wait of [text('preview.waitingConnection'),text('preview.bridgeWaitingGame')]){service.lastError=wait;const s=service.status();assert.equal(s.lastError,null);assert.equal(s.waiting,wait);}
  const missing=text('preview.bridgeControlMissing',{name:f.settings.bridge.controlName});
  service.lastError=missing;assert.equal(service.status().waiting,missing,'shortly after a page load the bridge script may not be there yet');
- service.navigatedAt=Date.now()-bridgeGraceMs-1;const late=service.status();assert.equal(late.waiting,null);assert.equal(late.lastError,missing,'a project without a bridge still sees why bridge tools fail');
+ service.navigatedAt=Date.now()-bridgeGraceMs-1;const late=service.status();assert.equal(late.waiting,null);assert.equal(late.lastError,null,'a project without a bridge is a state, not an error');assert.equal(late.noBridge,true);
  f.page.reload();assert.equal(service.status().waiting,missing,'a new page load restarts the grace period');
  service.lastError=text('preview.bridgeMismatch');const mismatch=service.status();assert.equal(mismatch.lastError,text('preview.bridgeMismatch'));assert.equal(mismatch.waiting,null);
 });

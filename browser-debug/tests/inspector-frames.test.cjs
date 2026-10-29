@@ -67,3 +67,11 @@ test('a frame without a loaded engine is a loading-phase failure; a version mism
  const old=new InspectorFrames({isDestroyed:()=>false,mainFrame:{framesInSubtree:[make({cc:{VERSION:'3.7.4',director:{},UITransform:{},Vec2:{},Vec3:{}}})]}});
  await assert.rejects(old.call('1:1','snapshot',[]),error=>/3\.7\.4/.test(error.message)&&error.code===undefined);
 });
+test('a preview page on a LAN address (no secure context, no crypto.randomUUID) still bootstraps the inspector',async()=>{
+ const cc={VERSION:'3.8.8',director:{getScene:()=>null},UITransform:class{},Vec2:class{},Vec3:class{}};
+ const webcrypto=require('node:crypto').webcrypto;
+ const context=vm.createContext({window:{System:{import:async()=>cc},addEventListener(){}},document:{},crypto:{getRandomValues:array=>webcrypto.getRandomValues(array)}});
+ const item={processId:1,routingId:1,url:'http://192.168.31.17:7456/',executeJavaScript:code=>Promise.resolve(vm.runInContext(code,context))};
+ const api=new InspectorFrames({isDestroyed:()=>false,mainFrame:{framesInSubtree:[item]}});
+ await api.call('1:1','renderSnapshot',[]);assert.ok(context.window.__GIT_DESK_INSPECTOR__,'bootstrapped without crypto.randomUUID');
+});

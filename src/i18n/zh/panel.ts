@@ -1179,6 +1179,7 @@ register('zh', {
     'panel.preview.openingDevtools': '正在打开 DevTools',
     'panel.preview.processGone': '预览进程已退出，请关闭并重新打开调试预览。',
     'panel.preview.waitingGame': '等待游戏启动…',
+    'panel.preview.noBridge': '未接入项目预览桥；运行时检查器照常可用',
     'panel.preview.recordingOff': '调试采集已关闭',
     'panel.preview.reload': '刷新预览',
     'panel.preview.reloading': '正在刷新预览…',
