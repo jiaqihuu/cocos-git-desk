@@ -1,7 +1,8 @@
 name: Release
+# Started by hand on a tag: `gh workflow run release.yml --ref vX.Y.Z`. A release can also be built locally with
+# `npm run package` and uploaded with `gh release create`.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 jobs:
   package:
     runs-on: ubuntu-latest

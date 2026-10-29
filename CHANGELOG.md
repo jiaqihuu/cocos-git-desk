@@ -10,7 +10,7 @@ First public release of the extension that was previously developed inside a pri
 
 ### Added
 - MIT license, `repository`/`homepage`/`bugs` metadata, English `description`; `private` flag removed.
-- GitHub Actions: CI matrix (macOS, Ubuntu, Windows; Node 22; Git LFS; Python 3) running typecheck, build, tests and the English-default check (tests run with `core.autocrlf=false`, checkouts are LF through `.gitattributes`); release workflow that packages `cocos-git-desk-<version>.zip` with a SHA-256 file on `v*` tags.
+- GitHub Actions: CI matrix (macOS, Ubuntu, Windows; Node 22; Git LFS; Python 3) running typecheck, build, tests and the English-default check (tests run with `core.autocrlf=false`, checkouts are LF through `.gitattributes`); it runs on pull requests and on manual dispatch, not on every push. A manually started release workflow packages `cocos-git-desk-<version>.zip` with a SHA-256 file.
 - i18n: message registry with Chinese and English tables (`src/i18n/{zh,en}/*`), `GIT_DESK_LANG` override, English as the default outside a Chinese editor; Creator `i18n/en.js` and `i18n/zh.js` for panel titles and menu items.
 - Project configuration file `git-desk.config.json` (preview URL and engine versions, bridge object names, revision scan roots, language key audit settings, allowed AI client configs) and `debug.stateDir`/`debug.outputDir` in the local `agent-settings.json`. See `docs/CONFIG.md`.
 - Tool catalogue split into `static/mcp-tools.core.json`, `mcp-tools.inspector.json`, `mcp-tools.bridge.json` and `mcp-tools.i18n.json`; `tools/list` merges the groups that are enabled. `scripts/tools-doc.cjs` generates `docs/TOOLS.md` from them.

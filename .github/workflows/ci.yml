@@ -1,8 +1,9 @@
 name: CI
+# Runs on pull requests and when started by hand (Actions tab or `gh workflow run ci.yml --ref <branch>`), not on every
+# push: the Windows job alone takes about 45 minutes.
 on:
-  push:
-    branches: ['**']
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     strategy:

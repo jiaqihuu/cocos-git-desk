@@ -57,4 +57,4 @@ Imperative subject line under 72 characters, body explaining what changed and wh
 
 ## Release
 
-Tag `vX.Y.Z` on `main`. The release workflow runs typecheck, build and packaging and attaches `cocos-git-desk-X.Y.Z.zip` plus its `.sha256` to the GitHub release. Update `version` in `package.json` and move the "Unreleased" section of `CHANGELOG.md` to the new version before tagging.
+Tag `vX.Y.Z` on `main`, then either start the release workflow on that tag (`gh workflow run release.yml --ref vX.Y.Z`), which runs typecheck, build and packaging and attaches `cocos-git-desk-X.Y.Z.zip` plus its `.sha256` to the GitHub release, or run `npm run package` locally and upload both files with `gh release create`. CI does not run on push; start it by hand (`gh workflow run ci.yml --ref <branch>`) or open a pull request. Update `version` in `package.json` and move the "Unreleased" section of `CHANGELOG.md` to the new version before tagging.
