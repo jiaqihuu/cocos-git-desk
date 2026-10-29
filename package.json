@@ -1,0 +1,313 @@
+{
+  "name": "cocos-git-desk",
+  "version": "0.2.0",
+  "package_version": 2,
+  "title": "i18n:cocos-git-desk.title",
+  "description": "Git for Cocos Creator projects and submodules, with a scoped MCP (Git, editor tools, runtime inspector) for AI clients",
+  "author": "jiaqihuu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jiaqihuu/cocos-git-desk.git"
+  },
+  "homepage": "https://github.com/jiaqihuu/cocos-git-desk#readme",
+  "bugs": {
+    "url": "https://github.com/jiaqihuu/cocos-git-desk/issues"
+  },
+  "keywords": [
+    "cocos-creator",
+    "cocos",
+    "extension",
+    "git",
+    "mcp",
+    "ai",
+    "runtime-inspector",
+    "prefab-diff"
+  ],
+  "editor": ">=3.8.0 <3.9.0",
+  "main": "./dist/main.js",
+  "panels": {
+    "runtime-inspector": {
+      "title": "i18n:cocos-git-desk.panel.runtimeInspector",
+      "type": "simple",
+      "main": "./dist/runtime-inspector-window.js",
+      "size": {
+        "width": 820,
+        "height": 760,
+        "min-width": 340,
+        "min-height": 420
+      }
+    },
+    "runtime-hierarchy": {
+      "title": "i18n:cocos-git-desk.panel.runtimeHierarchy",
+      "type": "dockable",
+      "main": "./dist/runtime-hierarchy-panel.js",
+      "size": {
+        "width": 300,
+        "height": 600,
+        "min-width": 220,
+        "min-height": 300
+      }
+    },
+    "runtime-properties": {
+      "title": "i18n:cocos-git-desk.panel.runtimeProperties",
+      "type": "dockable",
+      "main": "./dist/runtime-properties-panel.js",
+      "size": {
+        "width": 340,
+        "height": 600,
+        "min-width": 240,
+        "min-height": 300
+      }
+    },
+    "default": {
+      "title": "i18n:cocos-git-desk.panel.git",
+      "type": "dockable",
+      "main": "./dist/panel.js",
+      "size": {
+        "width": 1200,
+        "height": 760,
+        "min-width": 360,
+        "min-height": 420
+      }
+    },
+    "debug-preview": {
+      "title": "i18n:cocos-git-desk.panel.debugPreview",
+      "type": "dockable",
+      "main": "./dist/debug-preview-panel.js",
+      "size": {
+        "width": 1100,
+        "height": 760,
+        "min-width": 360,
+        "min-height": 360
+      }
+    }
+  },
+  "contributions": {
+    "scene": {
+      "script": "./dist/runtime-inspector-scene.js"
+    },
+    "shortcuts": [
+      {
+        "message": "open",
+        "win": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
+      }
+    ],
+    "messages": {
+      "prepare-editor": {
+        "methods": [
+          "prepareEditor"
+        ]
+      },
+      "open": {
+        "title": "i18n:cocos-git-desk.menu.open",
+        "methods": [
+          "open"
+        ]
+      },
+      "snapshot": {
+        "methods": [
+          "snapshot"
+        ]
+      },
+      "details": {
+        "methods": [
+          "details"
+        ]
+      },
+      "diff": {
+        "methods": [
+          "diff"
+        ]
+      },
+      "history": {
+        "methods": [
+          "history"
+        ]
+      },
+      "commit-files": {
+        "methods": [
+          "commitFiles"
+        ]
+      },
+      "prepare": {
+        "methods": [
+          "prepare"
+        ]
+      },
+      "execute": {
+        "methods": [
+          "execute"
+        ]
+      },
+      "task": {
+        "methods": [
+          "task"
+        ]
+      },
+      "reveal": {
+        "methods": [
+          "reveal"
+        ]
+      },
+      "scope-reviews": {
+        "methods": [
+          "scopeReviews"
+        ]
+      },
+      "scope-review-view": {
+        "methods": [
+          "scopeReviewView"
+        ]
+      },
+      "scope-review-decision": {
+        "methods": [
+          "scopeReviewDecision"
+        ]
+      },
+      "refresh-remote": {
+        "methods": [
+          "refreshRemote"
+        ]
+      },
+      "check-remote": {
+        "methods": [
+          "checkRemote"
+        ]
+      },
+      "browser-debug-open": {
+        "methods": [
+          "browserDebugOpen"
+        ]
+      },
+      "browser-debug-connect-codex": {
+        "methods": [
+          "browserDebugConnectCodex"
+        ]
+      },
+      "browser-debug-set-enabled": {
+        "methods": [
+          "browserDebugSetEnabled"
+        ]
+      },
+      "browser-debug-external": {
+        "methods": [
+          "browserDebugExternal"
+        ]
+      },
+      "debug-preview-config": {
+        "methods": [
+          "debugPreviewConfig"
+        ]
+      },
+      "debug-preview-bind": {
+        "methods": [
+          "debugPreviewBind"
+        ]
+      },
+      "debug-preview-release": {
+        "methods": [
+          "debugPreviewRelease"
+        ]
+      },
+      "runtime-inspector-asset": {
+        "methods": [
+          "runtimeInspectorAsset"
+        ]
+      },
+      "debug-preview-metrics": {
+        "methods": [
+          "debugPreviewMetrics"
+        ]
+      },
+      "debug-preview-status": {
+        "methods": [
+          "debugPreviewStatus"
+        ]
+      },
+      "browser-debug-export-open": {
+        "methods": [
+          "browserDebugExport"
+        ]
+      },
+      "browser-debug-export": {
+        "methods": [
+          "browserDebugExport"
+        ]
+      },
+      "debug-preview-open": {
+        "methods": [
+          "browserDebugOpen"
+        ]
+      },
+      "runtime-inspector-open": {
+        "methods": [
+          "runtimeInspectorOpen"
+        ]
+      },
+      "runtime-inspector-dock": {
+        "methods": [
+          "runtimeInspectorDock"
+        ]
+      },
+      "runtime-inspector-restore": {
+        "methods": [
+          "runtimeInspectorRestore"
+        ]
+      },
+      "runtime-inspector-state": {
+        "methods": [
+          "runtimeInspectorState"
+        ]
+      },
+      "runtime-inspector-view": {
+        "methods": [
+          "runtimeInspectorView"
+        ]
+      },
+      "runtime-inspector-update": {
+        "methods": [
+          "runtimeInspectorUpdate"
+        ]
+      },
+      "runtime-inspector-action": {
+        "methods": [
+          "runtimeInspectorAction"
+        ]
+      },
+      "runtime-inspector-read": {
+        "methods": [
+          "runtimeInspectorRead"
+        ]
+      },
+      "runtime-inspector-report": {
+        "methods": [
+          "runtimeInspectorReport"
+        ]
+      },
+      "runtime-inspector-call": {
+        "methods": [
+          "runtimeInspectorCall"
+        ]
+      }
+    },
+    "toolbar": {
+      "middle": "./dist/debug-preview-toolbar.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --require ./tests/env.cjs --require ./tests/zh.cjs --test tests/*.test.cjs browser-debug/tests/*.test.cjs",
+    "test:en": "node --test tests/i18n-english.test.cjs",
+    "package": "node scripts/package.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.9",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

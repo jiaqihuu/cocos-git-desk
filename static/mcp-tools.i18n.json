@@ -1,0 +1,45 @@
+[
+  {
+    "name": "creator_language_keys",
+    "description": "Audit language keys touched by a change (keys match i18n.keyPattern in git-desk.config.json; the tool is listed only when it is set): which keys the uncommitted change (or the change since a revision) adds, where each is used, which fallback json files under i18n.directory have it (i18n.languages, or every json file there), placeholder consistency across languages, the commit that first introduced it, and a CSV draft for whoever maintains the remote copy, laid out by i18n.csvLayout (one row per key, or one row per key and language) with the i18n.csvColumns columns. keys audits specific keys instead; csv=missing drafts rows for keys that lack a language, csv=all drafts every key. A remote configuration, if any, must still be checked separately.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "maxItems": 100
+        },
+        "since": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "paths": {
+          "type": "array",
+          "maxItems": 50
+        },
+        "history": {
+          "type": "boolean"
+        },
+        "csv": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 8
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]

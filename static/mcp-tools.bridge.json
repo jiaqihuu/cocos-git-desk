@@ -1,0 +1,422 @@
+[
+  {
+    "name": "browser_debug_enable",
+    "description": "Enable the project preview observer (page bridge) in the embedded debug preview when the task needs runtime evidence. The choice is saved per machine/project and restored on reload. No source writes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_disable",
+    "description": "Save the observer choice OFF for this machine/project and remove current observers from the page.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_connect",
+    "description": "Report the embedded preview connection, capture buffer and saved observer preference without changing anything.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_identity",
+    "description": "Read preview identity, environment and loaded source stamp. compareDisk adds a scoped disk fingerprint comparison; it is evidence, not proof of compiled or prefab freshness.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "compareDisk": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_hierarchy",
+    "description": "Query bounded Cocos nodes with button/blocker states through the project bridge (needs browser_debug_enable). Text is opt-in; EditBox subtrees never expose text. Coordinates do not prove clickability.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "contains": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "activeOnly": {
+          "type": "boolean"
+        },
+        "includeText": {
+          "type": "boolean"
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_inspect_node",
+    "description": "Inspect a node through the project bridge using uuid and sessionId from a fresh browser_debug_hierarchy; stale sessions are rejected. Only known UI fields are returned.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "uuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "includeText": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "uuid",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_state",
+    "description": "Read root UI layers and network connection/request counts without fetching server data or account information.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_timeline",
+    "description": "Read client HTTP/unary RPC starts, completions, pending calls, pointer positions and exception locations recorded by the project bridge. No packet bodies. The sequence cursor resets on reload; inspect sessionId and gap.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "afterSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_ui_list",
+    "description": "List the UI views registered with the game (numeric view id uiid, name = last prefab path segment, prefab path, bundle, layer, whether currently open). Preview only; needs browser_debug_enable. Use before ui_open/ui_close.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_ui_open",
+    "description": "Open a game view by name (last prefab path segment), full prefab path, or numeric view id (uiid), optionally with JSON args, through the project page bridge, as the game itself would. Preview only; the view loads asynchronously, confirm with hierarchy. Use only within the task the person authorized.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "uiid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "args": {
+          "type": "object"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_ui_close",
+    "description": "Close a game view by name, prefab path or numeric view id (uiid), through the project page bridge. Preview only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "uiid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_language",
+    "description": "Without code: read the current language and the available list. With code: switch the game language (reloads language assets). Preview only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_mock_set",
+    "description": "Register a preview-only fake response for one unary RPC method (transport rpc, name = full method such as pkg.v1.Service/Method) or one HTTP request path (transport http, name = path; optional method). Hits skip the real request and are written to the timeline as mock-hit. fail=true returns the same shape the game sees on a real failure as reported by the project page bridge; once removes the mock after the first hit; delayMs ≤ 10000. What can be mocked is decided by the project page bridge; cleared when the observer is disabled or the page reloads.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "transport": {
+          "type": "string",
+          "enum": [
+            "rpc",
+            "http"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10
+        },
+        "response": {
+          "type": "object"
+        },
+        "fail": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "err": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "once": {
+          "type": "boolean"
+        },
+        "delayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "transport",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_mock_list",
+    "description": "List registered preview mocks with hit counts.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_mock_clear",
+    "description": "Remove one mock (transport + name) or, without arguments, all mocks.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "transport": {
+          "type": "string",
+          "enum": [
+            "rpc",
+            "http"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_stats",
+    "description": "Current-frame render statistics from the running game: fps, frame time, draw calls, instances, triangles and node count (what the engine profiler shows). Sample several times for a trend.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_capture_bodies",
+    "description": "Opt in to keeping RPC/HTTP request and response bodies in the preview timeline (browser_debug_timeline), redacted for secret-looking keys and bounded to 4 KB each. Off by default and after a page reload; disable when done.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]

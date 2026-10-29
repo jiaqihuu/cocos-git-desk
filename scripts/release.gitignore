@@ -1,0 +1,5 @@
+# Shipped as the extension's own .gitignore. The extension writes per-machine state under .cache/: commit
+# drafts, task records, review requests and agent-connection.json, which holds the loopback MCP token.
+# Never commit it, whatever the project's own .gitignore says.
+.cache/
+__pycache__/

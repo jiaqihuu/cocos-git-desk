@@ -1,0 +1,32 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {PreviewCapture}=require('../dist/preview-capture');
+const url='http://localhost:7456/';
+test('captures redacted console, exception, network and navigation events with bounded buffer',()=>{
+ const c=new PreviewCapture(url,3);assert.equal(c.status().active,false);
+ c.handle('Runtime.consoleAPICalled',{type:'error',args:[{type:'string',value:'before start'}]});assert.equal(c.eventsBuffer.length,0,'nothing is recorded before start');
+ c.start();const now=Date.now()+5;
+ c.handle('Runtime.consoleAPICalled',{type:'error',timestamp:now,args:[{type:'string',value:'token=abcdefghijklmnopqrstuvwxyz0123456789'}],stackTrace:{callFrames:[{url:'http://localhost:7456/app.js?x=1',lineNumber:3,columnNumber:4}]}});
+ c.handle('Runtime.consoleAPICalled',{type:'error',timestamp:now,args:[{type:'string',value:'token=abcdefghijklmnopqrstuvwxyz0123456789'}]});
+ c.handle('Runtime.consoleAPICalled',{type:'log',timestamp:now-100000,args:[{type:'string',value:'historical'}]});
+ c.handle('Runtime.exceptionThrown',{timestamp:now+1,exceptionDetails:{text:'Uncaught',exception:{description:'Error: boom'},stackTrace:{callFrames:[{url:'http://localhost:7456/a.js',lineNumber:1,columnNumber:1}]}}});
+ c.handle('Network.requestWillBeSent',{requestId:'r1',request:{method:'POST',url:'http://api.test/x?secret=1'}});
+ c.handle('Network.responseReceived',{requestId:'r1',response:{status:500,url:'http://api.test/x?secret=1'}});
+ const status=c.status();assert.equal(status.suppressedDuplicateEvents,1);assert.equal(status.suppressedHistoricalEvents,1);
+ assert.equal(c.eventsBuffer.length,3);assert.equal(status.droppedEvents,0);
+ const events=c.events({latest:true}).events;assert.equal(events.at(-1).category,'http');assert.equal(events.at(-1).method,'POST');
+ c.handle('Page.frameNavigated',{frame:{url}});assert.equal(c.eventsBuffer.length,3);assert.equal(c.status().droppedEvents,1);assert.equal(c.pageGeneration,1);
+ assert.equal(c.events({sinceId:0,latest:false,categories:['navigation']}).events[0].target,true);
+ const summary=c.summary({});assert.equal(summary.categories.navigation,1);
+ assert.equal(c.events({query:'boom'}).matchingEvents,1);
+ c.stop();assert.equal(c.status().active,false);assert.equal(c.eventsBuffer.length,3,'buffer survives stop');
+});
+test('markers, reload waiting and interval comparison',async t=>{
+ const c=new PreviewCapture(url);assert.throws(()=>c.mark('x'),/Start a capture/);
+ c.start();const m1=c.mark('before').marker;c.handle('Runtime.exceptionThrown',{exceptionDetails:{text:'Error A'}});const m2=c.mark('after');
+ const pending=c.waitForReload({afterId:m2.marker.id,timeoutMs:100});c.handle('Page.frameNavigated',{frame:{url}});const observed=await pending;assert.equal(observed.observed,true);assert.equal(observed.event.category,'navigation');
+ assert.equal((await c.waitForReload({afterId:999,timeoutMs:100})).reason,'timeout');
+ const report=c.compare({beforeStartId:m1.id,beforeEndId:m2.marker.id,afterStartId:m2.marker.id});
+ assert.equal(report.onlyBefore.length,1);assert.equal(report.after.navigationCount,1);
+ assert.throws(()=>c.compare({beforeStartId:5,beforeEndId:1,afterStartId:1}),/ordered/);
+ const stopped=c.waitForReload({afterId:c.eventsBuffer.at(-1).id,timeoutMs:5000});c.stop();assert.equal((await stopped).reason,'capture_stopped');
+});

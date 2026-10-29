@@ -1,0 +1,14 @@
+# Codex project configuration (<project>/.codex/config.toml): the Git Desk MCP served by the running
+# Cocos Creator. Replace <project> with the absolute path of the Creator project. Creator writes this
+# block itself when git-desk.config.json lists "codex" under clients ("Configure AI clients" in the
+# debug preview panel); a hand-written [mcp_servers.cocos-git-desk] entry is left untouched.
+
+# BEGIN COCOS GIT DESK (managed by Creator)
+[mcp_servers.cocos-git-desk]
+command = "python3"
+args = ["<project>/extensions/cocos-git-desk/scripts/git-desk-mcp.py","--project","<project>"]
+cwd = "<project>"
+startup_timeout_sec = 30
+tool_timeout_sec = 150
+enabled = true
+# END COCOS GIT DESK

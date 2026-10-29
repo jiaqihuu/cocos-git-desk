@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cocos-git-desk": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-c",
+        "import os,runpy,sys; from pathlib import Path; root=Path(os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd()).resolve(); script=root/'extensions/cocos-git-desk/scripts/git-desk-mcp.py'; sys.argv=[str(script),'--project',str(root)]; runpy.run_path(str(script),run_name='__main__')"
+      ]
+    }
+  }
+}

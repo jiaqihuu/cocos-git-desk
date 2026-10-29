@@ -1,0 +1,12 @@
+node_modules/
+.cache/
+.npm-cache/
+.test-work/
+releases/
+dist/
+.DS_Store
+.serena/
+__pycache__/
+*.py[cod]
+node_modules
+.claude/worktrees/

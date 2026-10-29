@@ -1,0 +1,491 @@
+[
+  {
+    "name": "runtime_inspector_hierarchy",
+    "description": "Read the live Cocos node tree of the embedded debug preview (requires the Creator debug preview panel). Bounded page: contains filters by node path, activeOnly hides inactive subtrees. Returns sessionId for follow-up calls; truncated/scanLimitReached mark coverage gaps.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "contains": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "activeOnly": {
+          "type": "boolean"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_layout",
+    "description": "Flattened UI layout of the running game for design comparison: every node with a UITransform as x, y, width, height in design pixels with a top-left origin, plus anchor, scale, opacity, font size, color, sprite frame and (opt-in) label text. root limits to a subtree (node uuid), contains filters by path; activeOnly defaults to true. Needs the embedded debug preview.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "contains": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "activeOnly": {
+          "type": "boolean"
+        },
+        "includeText": {
+          "type": "boolean"
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_layout_compare",
+    "description": "Compare the running UI with design measurements: pass design boxes (name, x, y, width, height in the design canvas with a top-left origin, optional text, fontSize, color) taken from the design tool, and get per-element deltas against the live layout (dx, dy, dw, dh, text/fontSize/color matches), elements off tolerance, and what is unmatched on either side. scale/offsetX/offsetY convert the design canvas to the game design resolution; root/contains narrow the runtime side. Names are matched exactly, then case-insensitively, then by unique containment; duplicates pick the nearest node.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "design": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {}
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 100
+        },
+        "offsetX": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "offsetY": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "contains": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "matchBy": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4
+        },
+        "ignoreCase": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "design"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_inspect",
+    "description": "Read one live node: transform, prefab source, referenced assets, owning view and components with their fields (same data as the Runtime Properties panel). uuid and sessionId come from runtime_inspector_hierarchy; a reloaded page rejects stale sessions. componentId narrows to one component; all includes private fields.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "uuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "componentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "all": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "uuid",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_select",
+    "description": "Select a live node in the Creator runtime hierarchy/properties panels and bring them forward, so the person sees what the AI refers to. No game mutation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "uuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "uuid",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_print",
+    "description": "Print a node or component to the Creator console as readable JSON and expose it as $gd0 in the preview DevTools; returns the same record.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "uuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "componentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "uuid",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "runtime_inspector_status",
+    "description": "Self-check of the debug tooling in one call: embedded preview binding, observer preference, collector hub (frame, session, node count, selection, pick/link switches), which Git Desk panels exist, what each open inspector surface currently renders (rows, names, selected node, component blocks, messages), and the extension's recent failures. Works without a preview; use it before asking a person to look at the editor.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_export",
+    "description": "Save one local evidence package under the debug output directory (agent-settings.json debug.outputDir, default ~/.cocos-git-desk/<projectId>/exports) with identity, UI states, merged timeline, pending requests and optional screenshot (default true). Refuses mixed page sessions. Screenshots may contain personal data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "screenshot": {
+          "type": "boolean"
+        },
+        "compareDisk": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_start",
+    "description": "Start a fresh capture of the embedded preview page events (console, exceptions, network, navigation). Existing console history is skipped by default; WebSocket payload capture is opt-in and may contain private data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "captureWebSocketPayloads": {
+          "type": "boolean"
+        },
+        "includeExistingConsole": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_status",
+    "description": "Show preview connection, capture target, buffer range, dropped-event count and the observer preference.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_events",
+    "description": "Read a bounded page of captured events. By default returns the latest matches; use nextSinceId from the previous result to continue. Set latest=false with sinceId=0 to read from the oldest retained event. Reports buffer gaps.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sinceId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "latest": {
+          "type": "boolean"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "query": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_summary",
+    "description": "Summarize captured event categories, levels and recent errors since an event ID without dumping all logs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sinceId": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_mark",
+    "description": "Add a short marker to the capture immediately before or after a manual reproduction step.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_wait_for_reload",
+    "description": "Wait up to 15 seconds for a main-frame navigation of the preview after an event ID. Reports timeout without claiming the code was compiled or reloaded.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "afterId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 15000
+        }
+      },
+      "required": [
+        "afterId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_compare",
+    "description": "Compare two explicitly marked reproduction intervals: event counts, navigations and errors seen only in each interval. Differences are observations, not proof of a fix.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "beforeStartId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "beforeEndId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "afterStartId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "afterEndId": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "beforeStartId",
+        "beforeEndId",
+        "afterStartId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "browser_debug_stop",
+    "description": "Save the observer preference OFF, remove observers and stop the capture. Buffered events remain readable until the next start or the preview panel closes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  }
+]
