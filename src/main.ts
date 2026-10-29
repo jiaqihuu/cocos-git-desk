@@ -365,7 +365,12 @@ function reopenFromMarker(retry: boolean): void {
     const age = Date.now() - closedAt;
     if (age >= 0 && age < 120000) reopenTimer = setTimeout(() => {
         reopenTimer = undefined;
-        void methods.browserDebugOpen().then(result => { if (!result.ok) notice('warn', t('main.previewReopenFailed', { error: result.error })); });
+        void methods.browserDebugOpen().then(result => {
+            if (!result.ok) { notice('warn', t('main.previewReopenFailed', { error: result.error })); return; }
+            // The closed tab's own clean-up asks to restore Creator's panels and can arrive after the new tab docked the
+            // runtime panels, closing them again; dock once more after it has settled.
+            reopenTimer = setTimeout(() => { reopenTimer = undefined; void methods.runtimeInspectorDock(); }, 1500);
+        });
     }, 500);
     else if (retry) reopenTimer = setTimeout(() => { reopenTimer = undefined; reopenFromMarker(false); }, 2000);
 }

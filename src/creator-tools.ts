@@ -370,7 +370,7 @@ export class CreatorTools {
         const assetLabels = new Map<string, string>(), typeLabels = new Map<string, string>();
         const lookup = async (uuid: string) => { try { return await this.host.request<AssetInfo | null>('asset-db', 'query-asset-info', uuid, ['url', 'name']); } catch { return null; } };
         for (const uuid of references.uuids.slice(0, 80)) { const info = await lookup(uuid); if (info?.url) assetLabels.set(uuid, info.url.replace(/^db:\/\/assets\//, '')); }
-        for (const type of references.types.slice(0, 80)) { const uuid = decompressUuid(type); const info = uuid ? await lookup(uuid) : null; if (info?.name) typeLabels.set(type, info.name); }
+        for (const type of references.types.slice(0, 80)) { const uuid = decompressUuid(type); const info = uuid ? await lookup(uuid) : null; if (info?.name) typeLabels.set(type, info.name.replace(/\.(ts|js)$/i, '')); }
         const diff = diffSerialized(leftObjects, rightObjects, { limit, labelAsset: uuid => assetLabels.get(uuid), labelType: type => typeLabels.get(type) });
         return { path: name, leftRevision: left, rightRevision: right, leftMissing: before === null, rightMissing: after === null, ...diff,
             note: t('creator.tools.prefabDiffNote') };

@@ -10,7 +10,7 @@ export interface PropertyChange { node: string; component?: string; property: st
 export interface AssetUse { uuid: string; label?: string; before: number; after: number; }
 export interface PrefabDiff { left: { nodes: number; components: number }; right: { nodes: number; components: number }; nodes: NodeChange[]; components: ComponentChange[]; properties: PropertyChange[]; assets: AssetUse[]; truncated: boolean; summary: string; }
 
-interface NodeEntry { index: number; name: string; parent: string | null; stableId: string; components: { index: number; type: string; key: string }[]; }
+interface NodeEntry { index: number; name: string; parent: string | null; stableId: string; components: { index: number; type: string; key: string }[]; mounted: { index: number; type: string; key: string; node: string }[]; }
 interface Model { objects: SerializedObject[]; nodes: Map<string, NodeEntry>; pathOf: Map<number, string>; componentOf: Map<number, { node: string; key: string }>; uuids: Map<string, number>; types: Set<string>; }
 
 const NODE_TYPES = new Set(['cc.Node', 'cc.Scene']);
@@ -50,7 +50,7 @@ export function collectReferences(sides: SerializedObject[][]): { uuids: string[
     return { uuids: [...uuids].slice(0, UUID_LIMIT), types: [...types].slice(0, UUID_LIMIT) };
 }
 
-export function buildModel(objects: SerializedObject[]): Model {
+export function buildModel(objects: SerializedObject[], options: PrefabDiffOptions = {}): Model {
     const model: Model = { objects, nodes: new Map(), pathOf: new Map(), componentOf: new Map(), uuids: new Map(), types: new Set() };
     const stableId = (object: SerializedObject): string => {
         if (typeof object._id === 'string' && object._id) return 'id:' + object._id;
@@ -60,7 +60,10 @@ export function buildModel(objects: SerializedObject[]): Model {
     const visit = (index: number, parentPath: string | null, siblings: Map<string, number>) => {
         const object = objects[index];
         if (!object || model.pathOf.has(index)) return;
-        const base = String(object._name ?? ''), count = (siblings.get(base) ?? 0) + 1;
+        // A prefab instance root keeps its name in the prefab asset, not in this file: name it after the asset.
+        const prefabInfo = isRef(object._prefab) ? objects[object._prefab.__id__] : undefined;
+        const assetName = () => { const asset = prefabInfo?.asset; if (!isAssetRef(asset)) return ''; const label = options.labelAsset?.(asset.__uuid__); return label ? label.split('/').pop()!.replace(/\.prefab$/i, '') : ''; };
+        const base = typeof object._name === 'string' ? object._name : prefabInfo && isRef(prefabInfo.instance) ? assetName() : '', count = (siblings.get(base) ?? 0) + 1;
         siblings.set(base, count);
         const path = (parentPath === null ? '' : parentPath + '/') + (count > 1 ? base + '#' + count : base);
         model.pathOf.set(index, path);
@@ -72,7 +75,24 @@ export function buildModel(objects: SerializedObject[]): Model {
             const key = n > 1 ? type + '#' + n : type;
             components.push({ index: ref.__id__, type, key }); model.componentOf.set(ref.__id__, { node: path, key }); model.types.add(type);
         }
-        model.nodes.set(path, { index, name: base, parent: parentPath, stableId: stableId(object), components });
+        // Components added to a prefab instance in the scene live in its PrefabInstance.mountedComponents, not in
+        // _components. They are keyed by the target node inside the prefab: the instance root is this node, any other
+        // target is shown as <node>/[<localID>] because the prefab's own children are not in this file.
+        const mounted: NodeEntry['mounted'] = [], info = isRef(object._prefab) ? objects[object._prefab.__id__] : undefined;
+        const instance = info && isRef(info.instance) ? objects[info.instance.__id__] : undefined;
+        for (const mountRef of Array.isArray(instance?.mountedComponents) ? instance!.mountedComponents as unknown[] : []) {
+            const mount = isRef(mountRef) ? objects[mountRef.__id__] : undefined, targetInfo = mount && isRef(mount.targetInfo) ? objects[mount.targetInfo.__id__] : undefined;
+            const target = Array.isArray(targetInfo?.localID) ? (targetInfo!.localID as unknown[]).map(String).join('/') : '?';
+            const node = target === info!.fileId ? path : path + '/[' + target + ']', counts = new Map<string, number>();
+            for (const ref of Array.isArray(mount?.components) ? mount!.components as unknown[] : []) {
+                if (!isRef(ref) || !objects[ref.__id__]) continue;
+                const type = String(objects[ref.__id__]!.__type__ ?? '?'), n = (counts.get(type) ?? 0) + 1;
+                counts.set(type, n);
+                const key = n > 1 ? type + '#' + n : type;
+                mounted.push({ index: ref.__id__, type, key, node }); model.componentOf.set(ref.__id__, { node, key }); model.types.add(type);
+            }
+        }
+        model.nodes.set(path, { index, name: base, parent: parentPath, stableId: stableId(object), components, mounted });
         const childSiblings = new Map<string, number>();
         for (const ref of Array.isArray(object._children) ? object._children : []) if (isRef(ref)) visit(ref.__id__, path, childSiblings);
     };
@@ -131,7 +151,7 @@ const clip = (value: unknown): unknown => { const text = JSON.stringify(value) ?
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 export function diffSerialized(leftObjects: SerializedObject[], rightObjects: SerializedObject[], options: PrefabDiffOptions = {}): PrefabDiff {
-    const left = buildModel(leftObjects), right = buildModel(rightObjects), limit = Math.max(1, options.limit ?? 200);
+    const left = buildModel(leftObjects, options), right = buildModel(rightObjects, options), limit = Math.max(1, options.limit ?? 200);
     const label = (type: string) => options.labelType?.(type) ?? type;
     const nodes: NodeChange[] = [], components: ComponentChange[] = [], properties: PropertyChange[] = [];
     let truncated = false;
@@ -149,8 +169,8 @@ export function diffSerialized(leftObjects: SerializedObject[], rightObjects: Se
         const fromEntry = left.nodes.get(from)!;
         nodes.push({ kind: fromEntry.parent === entry.parent || (fromEntry.parent !== null && entry.parent !== null && pairs.get(entry.parent) === fromEntry.parent) ? 'renamed' : 'moved', path, from });
     }
-    for (const path of right.nodes.keys()) if (!pairs.has(path)) { nodes.push({ kind: 'added', path }); for (const component of right.nodes.get(path)!.components) components.push({ kind: 'added', node: path, type: label(component.type) }); }
-    for (const path of left.nodes.keys()) if (!usedLeft.has(path)) { nodes.push({ kind: 'removed', path }); for (const component of left.nodes.get(path)!.components) components.push({ kind: 'removed', node: path, type: label(component.type) }); }
+    for (const path of right.nodes.keys()) if (!pairs.has(path)) { nodes.push({ kind: 'added', path }); const entry = right.nodes.get(path)!; for (const component of [...entry.components.map(item => ({ ...item, node: path })), ...entry.mounted]) components.push({ kind: 'added', node: component.node, type: label(component.type) }); }
+    for (const path of left.nodes.keys()) if (!usedLeft.has(path)) { nodes.push({ kind: 'removed', path }); const entry = left.nodes.get(path)!; for (const component of [...entry.components.map(item => ({ ...item, node: path })), ...entry.mounted]) components.push({ kind: 'removed', node: component.node, type: label(component.type) }); }
     for (const [rightPath, leftPath] of pairs) {
         const a = left.objects[left.nodes.get(leftPath)!.index]!, b = right.objects[right.nodes.get(rightPath)!.index]!;
         for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
@@ -163,15 +183,26 @@ export function diffSerialized(leftObjects: SerializedObject[], rightObjects: Se
         const leftComponents = new Map(left.nodes.get(leftPath)!.components.map(item => [item.key, item])), rightComponents = new Map(right.nodes.get(rightPath)!.components.map(item => [item.key, item]));
         for (const [key, component] of rightComponents) if (!leftComponents.has(key)) components.push({ kind: 'added', node: rightPath, type: label(component.type) });
         for (const [key, component] of leftComponents) if (!rightComponents.has(key)) components.push({ kind: 'removed', node: rightPath, type: label(component.type) });
-        for (const [key, component] of rightComponents) {
-            const other = leftComponents.get(key); if (!other) continue;
-            const c = left.objects[other.index]!, d = right.objects[component.index]!;
+        const compare = (c: SerializedObject, d: SerializedObject, node: string, key: string) => {
             for (const field of new Set([...Object.keys(c), ...Object.keys(d)])) {
                 if (SKIP_COMPONENT.has(field)) continue;
                 const before = normalize(left, c[field], options), after = normalize(right, d[field], options);
-                if (!same(before, after)) push({ node: rightPath, component: label(component.key), property: field, before: clip(before), after: clip(after) });
+                if (!same(before, after)) push({ node, component: label(key), property: field, before: clip(before), after: clip(after) });
             }
+        };
+        for (const [key, component] of rightComponents) {
+            const other = leftComponents.get(key); if (!other) continue;
+            compare(left.objects[other.index]!, right.objects[component.index]!, rightPath, component.key);
         }
+        // Mounted components pair by target node and type; the target is relative to the instance, so it survives a rename.
+        const mountKey = (path: string, item: NodeEntry['mounted'][number]) => (item.node === path ? '' : item.node.slice(path.length)) + '|' + item.key;
+        const leftMounted = new Map(left.nodes.get(leftPath)!.mounted.map(item => [mountKey(leftPath, item), item])), rightMounted = new Map(right.nodes.get(rightPath)!.mounted.map(item => [mountKey(rightPath, item), item]));
+        for (const [key, item] of rightMounted) {
+            const other = leftMounted.get(key);
+            if (!other) components.push({ kind: 'added', node: item.node, type: label(item.type) });
+            else compare(left.objects[other.index]!, right.objects[item.index]!, item.node, item.key);
+        }
+        for (const [key, item] of leftMounted) if (!rightMounted.has(key)) components.push({ kind: 'removed', node: rightPath + item.node.slice(leftPath.length), type: label(item.type) });
     }
     const assets: AssetUse[] = [];
     for (const uuid of new Set([...left.uuids.keys(), ...right.uuids.keys()])) {

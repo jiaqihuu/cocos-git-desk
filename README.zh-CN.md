@@ -6,7 +6,9 @@ Cocos Creator 3.8 扩展：在编辑器内管理项目主仓库和递归子模�
 
 ![Git Desk 面板：工作区改动与 main.scene 的逐行暂存差异](store/screenshot-2-git-desk.png)
 
-![运行时检查器：运行中游戏的节点树与组件属性，停靠在 Creator 原生面板旁](store/screenshot-1-runtime-inspector.png)
+![AI 客户端通过 MCP 改场景：建任务范围、改属性、保存、场景语义差异，Git Desk 面板同步显示改动](store/screenshot-3-ai-mcp.png)
+
+![调试预览：运行中游戏的节点树与组件属性停靠在 Creator 原生面板旁，页面日志进入 Creator 控制台](store/screenshot-1-runtime-inspector.png)
 
 ## 与 funplay-cocos-mcp 的区别
 

@@ -114,6 +114,16 @@ test('page metrics come from the live page and are absent while disconnected',as
  await relay.bind(71);guest.url=relay.options.url;let expression='';guest.debugger.sendCommand=async(method,params)=>{expression=params?.expression||'';return {result:{value:{width:428,height:926,toolbar:50}}};};
  assert.deepEqual(await relay.pageMetrics(),{width:428,height:926,toolbar:50});assert.match(expression,/#GameDiv/);
  guest.debugger.sendCommand=async()=>({result:{value:{width:'x'}}});assert.equal(await relay.pageMetrics(),null);
+ // The page expression itself, run against stand-ins for Creator's preview page.
+ const page=({label,rotated=false,device='Apple iPhone 14 Pro',game=[937,432]}={})=>{const el=(attrs={})=>({...attrs,getAttribute:name=>attrs[name]});
+  const picker=label===undefined?null:el({value:device,querySelector:sel=>sel==='#name'?{textContent:label}:null});
+  return {querySelector:sel=>sel==='.toolbar'?{offsetHeight:45}:sel==='#view-select'?picker:sel==='#btn-rotate.checked'?(rotated?{}:null):sel==='#GameDiv'?{offsetWidth:game[0],offsetHeight:game[1]}:null};};
+ const run=document=>JSON.parse(JSON.stringify(require('node:vm').runInNewContext(expression,{document})));
+ assert.deepEqual(run(page({label:'Apple iPhone 14 Pro (393X852)'})),{width:393,height:852,toolbar:45},'the selected device size, not the zoom-dependent game box');
+ assert.deepEqual(run(page({label:'Apple iPhone 14 Pro (393X852)',rotated:true})),{width:852,height:393,toolbar:45},'rotation swaps the sides');
+ assert.deepEqual(run(page({label:'设计分辨率 (1280X720)',device:'Default'})),{width:1280,height:720,toolbar:45});
+ assert.deepEqual(run(page({label:'网页全屏',device:'WebpageFullScreen'})),{width:0,height:0,toolbar:45},'full-screen modes keep 100%');
+ assert.deepEqual(run(page()),{width:937,height:432,toolbar:45},'a template without the device picker falls back to #GameDiv');
 });
 test('partition, preview url and page control object come from the project configuration',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'gd-embedded-config-'));fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({uuid:'test-project-0004'}));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

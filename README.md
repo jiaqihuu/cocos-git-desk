@@ -6,7 +6,9 @@ A Cocos Creator 3.8 extension that puts Git for the project and its submodules i
 
 ![Git Desk panel: working tree changes and a line-staging diff of main.scene](store/screenshot-2-git-desk.png)
 
-![Runtime inspector: live node tree and component fields of the running game, docked next to Creator's panels](store/screenshot-1-runtime-inspector.png)
+![AI client editing a scene through MCP: scoped task, property change, save, semantic scene diff, while Git Desk shows the change](store/screenshot-3-ai-mcp.png)
+
+![Debug preview: runtime hierarchy and properties of the running game docked next to Creator's panels, with the page's console output in Creator's console](store/screenshot-1-runtime-inspector.png)
 
 ## How it differs from funplay-cocos-mcp
 

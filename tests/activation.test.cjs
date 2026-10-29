@@ -16,7 +16,7 @@ test('unload closes an open debug preview and leaves a marker; the next load reo
  const root=extensionRoot(t),project=projectDir(t),marker=path.join(root,'.cache','debug-preview-reopen-'+require('../dist/config').projectId(project)),filename=path.resolve(__dirname,'../dist/main.js'),req=createRequire(filename),exports={},calls=[],timers=[],app=new EventEmitter(),editor=new EventEmitter(),panel=new EventEmitter();
  editor.getTitle=()=>'Cocos Creator - demo';panel.getTitle=()=>'Debug Preview';let tool;
  fs.symlinkSync(path.resolve(__dirname,'../static'),path.join(root,'static'));
- const open=new Set(['scene','cocos-git-desk.default','cocos-git-desk.debug-preview']);
+ const open=new Set(['scene','hierarchy','inspector','cocos-git-desk.default','cocos-git-desk.debug-preview']);
  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,__dirname:path.join(root,'dist'),console,setTimeout:(fn,ms)=>timers.push({fn,ms}),clearTimeout:id=>{if(timers[id-1])timers[id-1].fn=null;},
   require:Object.assign(n=>n==='./git'?{GitDesk:class{task(){return undefined;}}}:n==='./contexts'?{WorkspaceContexts:class{constructor(){this.worktrees={ready:Promise.resolve()};}running(){return false;}}}:n==='./mcp-bridge'?{startMcpBridge:async(_cache,_project,_handle,call)=>{tool=call;return {close:async()=>{calls.push(['mcp-close']);}};}}:n==='electron'?{app,BrowserWindow:{getAllWindows:()=>[panel,editor]}}:req(n),{cache:req.cache}),
   Editor:{Project:{path:project},Message:{request:async(...args)=>{if(args[0]==='preview')return undefined;calls.push(args);return true;}},Panel:{has:async name=>open.has(name),open:async()=>true,focus:async name=>{calls.push(['focus',name]);return true;},close:async name=>{calls.push(['close',name]);open.delete(name);},openBeside:async(anchor,name)=>{calls.push(['beside',anchor,name]);open.add(name);return true;}}}});
@@ -31,6 +31,8 @@ test('unload closes an open debug preview and leaves a marker; the next load reo
  assert.ok(Date.now()-Number(fs.readFileSync(marker,'utf8'))<5000,'the marker records when the tab was closed');
  calls.length=0;timers.length=0;exports.load();assert.equal(fs.existsSync(marker),false,'load consumes the marker');assert.deepEqual(pending().map(timer=>timer.ms),[500]);
  await runTimers();assert.deepEqual(calls,[['beside','cocos-git-desk.default','cocos-git-desk.debug-preview']],'the tab comes back beside Git Desk');
+ assert.deepEqual(pending().map(timer=>timer.ms),[1500],'then the runtime panels are docked once more');calls.length=0;await runTimers();
+ assert.deepEqual(calls,[['beside','hierarchy','cocos-git-desk.runtime-hierarchy'],['beside','inspector','cocos-git-desk.runtime-properties']],'after the closed tab\'s late restore request');
  exports.load();assert.deepEqual(pending().map(timer=>timer.ms),[2000],'only once');await exports.unload();
  calls.length=0;timers.length=0;fs.writeFileSync(marker,String(Date.now()-3*60*1000));exports.load();assert.equal(fs.existsSync(marker),false);assert.deepEqual(pending().map(timer=>timer.ms),[2000],'a stale marker is dropped');
  // A load that ran before the old unload finished writing its marker picks it up on the recheck.

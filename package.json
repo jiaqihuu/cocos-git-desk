@@ -1,6 +1,6 @@
 {
   "name": "cocos-git-desk",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "package_version": 2,
   "title": "i18n:cocos-git-desk.title",
   "description": "Git for Cocos Creator projects and submodules, with a scoped MCP (Git, editor tools, runtime inspector) for AI clients",

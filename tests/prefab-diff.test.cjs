@@ -64,3 +64,30 @@ test('compressed script class ids decompress back to the asset uuid',()=>{
  assert.equal(compressUuid(uuid,true),'5f'+Buffer.from('2d9c1a8b3e4c7d9a6f0e1b2c3d4e5f','hex').toString('base64'),'the short form is plain base64 of the remaining bytes');
  assert.equal(decompressUuid('cc.Sprite'),null);assert.equal(decompressUuid('zz'),null);assert.equal(decompressUuid('86cefAWukVE77lEwgfFdYeD'),'86cef016-ba45-44ef-b944-c207c5758783','a real component class id from TournamentDetailsView.prefab (UIButton.ts)');
 });
+
+// A scene with a prefab instance whose root has no _name (the name lives in the prefab asset) and two components
+// mounted on the instance: one on the instance root, one on a node inside the prefab.
+function sceneWithInstance({speed=20,extra=true}={}){
+ const o=[
+  {__type__:'cc.SceneAsset',scene:{__id__:1}},
+  {__type__:'cc.Scene',_name:'main',_parent:null,_children:[{__id__:2}],_components:[],_prefab:null,_id:'scene'},
+  {__type__:'cc.Node',_parent:{__id__:1},_children:[],_components:[],_prefab:{__id__:3},_id:''},
+  {__type__:'cc.PrefabInfo',root:{__id__:2},asset:{__uuid__:'pf-islands'},fileId:'rootfile',instance:{__id__:4}},
+  {__type__:'cc.PrefabInstance',fileId:'inst',propertyOverrides:[],mountedChildren:[],mountedComponents:[{__id__:5}]},
+  {__type__:'cc.MountedComponentsInfo',targetInfo:{__id__:6},components:[{__id__:7}]},
+  {__type__:'cc.TargetInfo',localID:['rootfile']},
+  {__type__:'625844CvzxKWaRjNjPuFJ84',node:{__id__:2},_enabled:true,__prefab:null,speed,paused:false,_id:'spin'}];
+ if(extra){o[4].mountedComponents.push({__id__:8});o.push({__type__:'cc.MountedComponentsInfo',targetInfo:{__id__:9},components:[{__id__:10}]},{__type__:'cc.TargetInfo',localID:['childfile']},{__type__:'cc.Label',node:{__id__:2},_string:'Hi',_id:'label'});}
+ return o;}
+test('components mounted on a prefab instance are compared, added and removed like ordinary components',()=>{
+ const options={labelAsset:uuid=>uuid==='pf-islands'?'models/islands.prefab':undefined,labelType:type=>type==='625844CvzxKWaRjNjPuFJ84'?'Spin':undefined};
+ const changed=diffSerialized(sceneWithInstance(),sceneWithInstance({speed:45}),options);
+ assert.deepEqual(changed.properties,[{node:'main/islands',component:'Spin',property:'speed',before:20,after:45}],'a mounted script field change is a property change on the instance');
+ assert.deepEqual(changed.nodes,[]);assert.deepEqual(changed.components,[]);assert.equal(changed.right.components,2,'mounted components count as components');
+ const removed=diffSerialized(sceneWithInstance(),sceneWithInstance({extra:false}),options);
+ assert.deepEqual(removed.components,[{kind:'removed',node:'main/islands/[childfile]',type:'cc.Label'}],'a target inside the prefab is shown by its local id');
+ const added=diffSerialized(sceneWithInstance({extra:false}),sceneWithInstance(),options);
+ assert.deepEqual(added.components,[{kind:'added',node:'main/islands/[childfile]',type:'cc.Label'}]);
+ const unnamed=diffSerialized(sceneWithInstance(),sceneWithInstance({speed:45}));
+ assert.deepEqual(unnamed.properties.map(p=>[p.node,p.component]),[['main/','625844CvzxKWaRjNjPuFJ84']],'without asset labels the path and type stay raw but the change is still found');
+});

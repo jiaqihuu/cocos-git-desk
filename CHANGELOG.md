@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-10-29
+
+### Fixed
+- `creator_prefab_diff` missed components added to a prefab instance in a scene. Creator stores them in the instance's `mountedComponents`, not in the node's `_components`, so a changed field of such a component, for example a script on a prefab instance root, was reported as "0 property changes". Mounted components are now compared, added and removed like ordinary components; a component mounted on a node inside the prefab is shown as `<instance>/[<localID>]`. Found while running the extension in a fresh Creator 3.8.8 project.
+- A prefab instance root, whose name lives in the prefab asset rather than in the scene file, is named after its asset (`main/islands` instead of `main/`).
+- Script components are labelled by their class name without the `.ts` / `.js` extension.
+- "Fit to panel" in the Debug Preview zoomed in further on every page load and could end at 3×, cropping the game. Creator's preview sizes `#GameDiv` from the viewport at load time, and the viewport shrinks as the panel zooms in; since 0.2.2 fit is on by default and the factor is saved, so the zoom ratcheted up. Fit now uses the selected device's own size from the preview's device picker (swapped when rotated); full-screen modes keep 100%, and a preview template without the picker still falls back to `#GameDiv`.
+- After an extension reload, the reopened Debug Preview came back without the Runtime Hierarchy and Runtime Properties tabs: the closed tab's clean-up asked to restore Creator's panels and arrived after the new tab had docked them. The runtime panels are docked again once that has settled.
+
+### Added
+- Third store screenshot, an AI client editing a scene through MCP, in `store/` and both READMEs. The first screenshot now also shows the game's console output in Creator's console.
+
 ## [0.2.2] — 2026-10-29
 
 ### Added
@@ -144,7 +156,8 @@ Last version developed inside the private project; summarised from the Chinese c
 ### Added
 - First standalone package: recursive repository discovery, working tree and index diffs with image comparison, LFS object reads, file staging with related `.meta` expansion, commit/push/fetch, fast-forward update, branch creation and switching, submodule sync, previewed writes with two-minute expiry, Agent IPC protocol v1 (`details(repo, {kind: 'agent', protocol: 1, ...})`).
 
-[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jiaqihuu/cocos-git-desk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jiaqihuu/cocos-git-desk/releases/tag/v0.2.0

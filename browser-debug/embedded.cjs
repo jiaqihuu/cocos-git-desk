@@ -98,7 +98,11 @@ class EmbeddedPreview {
     async pageMetrics() {
         const state = this.status();
         if (!state.connected) return null;
-        const value = await this.evaluate("(()=>{const g=document.querySelector('#GameDiv'),t=document.querySelector('.toolbar');return {width:g?g.offsetWidth:0,height:g?g.offsetHeight:0,toolbar:t?t.offsetHeight:0};})()", { awaitPromise: false });
+        // Creator's preview sizes #GameDiv from the viewport at load time, and the viewport shrinks as the panel zooms in,
+        // so fitting to #GameDiv ratchets the zoom up on every reload. The selected device's own size ("Name (393X852)",
+        // swapped when rotated) does not depend on the zoom. Full-screen modes fill the viewport (0 × 0 keeps 100%);
+        // a custom preview template without the device picker falls back to #GameDiv.
+        const value = await this.evaluate("(()=>{const t=document.querySelector('.toolbar'),toolbar=t?t.offsetHeight:0,picker=document.querySelector('#view-select'),label=picker&&picker.querySelector('#name'),size=label&&/\\((\\d+)\\s*[xX\u00d7]\\s*(\\d+)\\)/.exec(label.textContent||'');if(size){const rotated=!!document.querySelector('#btn-rotate.checked');return {width:+size[rotated?2:1],height:+size[rotated?1:2],toolbar};}if(picker&&/FullScreen/.test(picker.getAttribute('value')||''))return {width:0,height:0,toolbar};const g=document.querySelector('#GameDiv');return {width:g?g.offsetWidth:0,height:g?g.offsetHeight:0,toolbar};})()", { awaitPromise: false });
         return value && Number.isFinite(value.width) && Number.isFinite(value.height) ? {width:value.width,height:value.height,toolbar:Number.isFinite(value.toolbar)?value.toolbar:0} : null;
     }
     release(id) {

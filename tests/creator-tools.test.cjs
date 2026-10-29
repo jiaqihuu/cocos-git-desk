@@ -248,3 +248,16 @@ test('creator_language_keys normalizes its options before handing them to Git De
  await assert.rejects(t.call('creator_language_keys',{since:'-bad'}),/无效的版本/);
  await assert.rejects(new CreatorTools({...base.tools.host,languageKeys:undefined},tools).call('creator_language_keys',{}),/不支持/);
 });
+test('creator_prefab_diff names a prefab instance after its asset and a mounted script after its class, without the file extension', async () => {
+ const base=fixture();const {compressUuid}=require('../dist/creator-tools');
+ const spinId='62584ab4-0bcf-4a59-a363-d8f8ee2717c3',islandsId='0f2c2a41-6d0e-4c2b-9a3b-1c3d5e7f9a01',spinType=compressUuid(spinId);
+ const assets={[spinId]:{url:'db://assets/scripts/Spin.ts',name:'Spin.ts'},[islandsId]:{url:'db://assets/models/islands.prefab',name:'islands.prefab'}};
+ const scene=speed=>[{__type__:'cc.SceneAsset',scene:{__id__:1}},{__type__:'cc.Scene',_name:'main',_parent:null,_children:[{__id__:2}],_components:[],_prefab:null,_id:'s'},
+  {__type__:'cc.Node',_parent:{__id__:1},_children:[],_components:[],_prefab:{__id__:3},_id:''},{__type__:'cc.PrefabInfo',root:{__id__:2},asset:{__uuid__:islandsId},fileId:'root',instance:{__id__:4}},
+  {__type__:'cc.PrefabInstance',propertyOverrides:[],mountedChildren:[],mountedComponents:[{__id__:5}]},{__type__:'cc.MountedComponentsInfo',targetInfo:{__id__:6},components:[{__id__:7}]},{__type__:'cc.TargetInfo',localID:['root']},
+  {__type__:spinType,node:{__id__:2},_enabled:true,speed}];
+ const host={...base.tools.host,fileAt:async(name,revision)=>JSON.stringify(scene(revision==='HEAD'?20:45)),
+  request:async(target,method,uuid)=>target==='asset-db'&&method==='query-asset-info'?assets[uuid]??null:base.tools.host.request(target,method,uuid)};
+ const out=await new CreatorTools(host,tools).call('creator_prefab_diff',{path:'assets/scene/main.scene'});
+ assert.deepEqual(out.properties,[{node:'main/islands',component:'Spin',property:'speed',before:20,after:45}]);
+});
